@@ -1,7 +1,7 @@
 from telegram import Update
-from telegram.ext import ContextTypes
+from telegram.ext import CallbackContext
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def start(update: Update, context: CallbackContext):
     """Обработчик команды /start"""
     welcome_text = """
 🌿 *Добро пожаловать в бот для диагностики растений!*
@@ -19,22 +19,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 Опишите симптомы вашего растения, и я помогу определить проблему!
     """
-    await update.message.reply_text(welcome_text, parse_mode='Markdown')
+    update.message.reply_text(welcome_text, parse_mode='Markdown')
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def help_command(update: Update, context: CallbackContext):
     """Обработчик команды /help"""
     help_text = """
 *Как пользоваться ботом:*
 
 1. Используйте /diagnose для начала диагностики
-2. Опишите симптомы вашего растения (например: "желтеют листья", "белый налет")
+2. Опишите симптомы вашего растения
 3. Я проанализирую симптомы и дам рекомендации
-
-*Примеры симптомов:*
-• Пожелтение листьев
-• Белый мучнистый налет
-• Сухие пятна
-• Паутина на растении
-• Увядание листьев
     """
-    await update.message.reply_text(help_text, parse_mode='Markdown')
+    update.message.reply_text(help_text, parse_mode='Markdown')
