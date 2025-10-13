@@ -1,9 +1,6 @@
 import logging
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler
-from config import BOT_TOKEN
-from handlers.start import start, help_command
-from handlers.diagnosis import diagnose_plant, handle_symptoms
-from handlers.recommendations import get_recommendations
+import os
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 # Настройка логирования
 logging.basicConfig(
@@ -14,22 +11,27 @@ logging.basicConfig(
 
 def main():
     """Запуск бота"""
-    if not BOT_TOKEN:
-        raise ValueError("BOT_TOKEN не установлен! Проверьте файл .env")
+    # Для Render используем переменные окружения
+    token = os.getenv('BOT_TOKEN')
 
-    # Создаем приложение
-    application = Application.builder().token(BOT_TOKEN).build()
+    if not token:
+        logging.error("BOT_TOKEN не установлен!")
+        return
+
+    application = Application.builder().token(token).build()
 
     # Регистрируем обработчики
+    from handlers.start import start, help_command
+    from handlers.diagnosis import diagnose_plant, handle_symptoms
+    from handlers.recommendations import get_recommendations
+
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("diagnose", diagnose_plant))
     application.add_handler(CommandHandler("recommendations", get_recommendations))
-
-    # Обработчик текстовых сообщений
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_symptoms))
 
-    # Запускаем бота
+    # Простой запуск через polling
     print("Бот запущен...")
     application.run_polling()
 
