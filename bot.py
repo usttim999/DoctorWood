@@ -1,10 +1,15 @@
 import logging
 import os
-from dotenv import load_dotenv
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
-# Загружаем .env (локально работает, на Render просто проигнорируется, если файла нет)
-load_dotenv()
+# Пробуем загрузить .env только локально
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # На Render python-dotenv не нужен
+    pass
+
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 # Настройка логирования
 logging.basicConfig(
@@ -12,11 +17,10 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# Получаем токен
 TOKEN = os.getenv("BOT_TOKEN")
 
 if not TOKEN:
-    logging.error("❌ BOT_TOKEN не установлен! Проверь .env или переменные окружения")
+    logging.error("❌ BOT_TOKEN не установлен! Проверь .env локально или Environment Variables на Render")
     exit(1)
 
 
@@ -53,7 +57,7 @@ async def help_command(update, context):
 
 async def diagnose(update, context):
     from handlers.diagnosis import diagnose_plant
-    await diagnose_plant(update, context)
+    diagnose_plant(update, context)
 
 
 async def recommendations(update, context):
@@ -63,7 +67,7 @@ async def recommendations(update, context):
 
 async def handle_symptoms(update, context):
     from handlers.diagnosis import handle_symptoms as hs
-    await hs(update, context)
+    hs(update, context)
 
 
 # --- Основная функция ---
