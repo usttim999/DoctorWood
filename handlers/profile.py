@@ -150,6 +150,7 @@ def build_profile_conversation():
         allow_reentry=True,
     )
 async def send_plant_card(update_or_message, plant_id: int):
+    # update_or_message может быть Update или Message
     msg = update_or_message.message if hasattr(update_or_message, "message") else update_or_message
 
     plant = get_plant(plant_id)
@@ -178,7 +179,6 @@ async def send_plant_card(update_or_message, plant_id: int):
         await msg.reply_photo(photo=photo, caption=text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
     else:
         await msg.reply_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
-
 
 async def delete_plant_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query

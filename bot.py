@@ -1,6 +1,5 @@
 import logging
 import os
-
 # Опциональная загрузка .env
 try:
     from dotenv import load_dotenv
@@ -8,12 +7,22 @@ try:
 except ImportError:
     pass
 
-from telegram.ext import Application, CommandHandler, MessageHandler, filters,  CallbackQueryHandler
+from telegram import ReplyKeyboardMarkup, Update
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters,
+)
+
 from database import init_db
-from handlers.profile import my_plants, build_profile_conversation
+from handlers.profile import my_plants, build_profile_conversation, delete_plant_cb
 from handlers.diagnosis import handle_symptoms as diagnose_text
 from handlers.recommendations import get_recommendations
-from handlers.profile import delete_plant_cb
+from handlers.diagnose_photo import diagnose_photo
+
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
@@ -25,19 +34,39 @@ if not TOKEN:
     exit(1)
 
 
-async def start(update, context):
+# Главное меню
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        ["🌱 Мои растения", "📚 База знаний"],
+        ["🔍 Диагностика", "🛎 Напоминания"],
+        ["👨‍🌾 Чат с экспертом"]
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
     text = (
         "🌿 *Добро пожаловать!*\n\n"
-        "Выберите действие:\n"
-        "• 🌱 Мои растения — /myplants\n"
-        "• 📚 База знаний — /knowledge (скоро)\n"
-        "• 🔍 Диагностика (текст) — просто опишите симптомы\n"
-        "• 🛎 Напоминания — (скоро)\n"
+        "Выберите действие кнопками ниже 👇"
     )
-    await update.message.reply_text(text, parse_mode="Markdown")
+    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=reply_markup)
 
 
-async def help_command(update, context):
+# Обработка кнопок меню
+async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+    if text == "🌱 Мои растения":
+        await my_plants(update, context)
+    elif text == "📚 База знаний":
+        await update.message.reply_text("База знаний пока в разработке 📖")
+    elif text == "🔍 Диагностика":
+        await update.message.reply_text("Пришлите фото растения для диагностики 🖼️")
+    elif text == "🛎 Напоминания":
+        await update.message.reply_text("Напоминания пока в разработке ⏰")
+    elif text == "👨‍🌾 Чат с экспертом":
+        await update.message.reply_text("Функция платных консультаций пока в разработке 💬")
+
+
+# Команда /help
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "*Команды:*\n"
         "/start — главное меню\n"
@@ -61,12 +90,21 @@ def main():
     # Диалог добавления растения
     app.add_handler(build_profile_conversation())
 
-    # Диагностика по тексту — любые сообщения
+    # Диагностика по тексту
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, diagnose_text))
+
+    # Диагностика по фото
+    app.add_handler(MessageHandler(filters.PHOTO, diagnose_photo))
+
+    # Callback для удаления растения
     app.add_handler(CallbackQueryHandler(delete_plant_cb, pattern="^delete_"))
-    app.add_handler(CommandHandler("myplants", my_plants))
-    app.add_handler(build_profile_conversation())
-    app.add_handler(CallbackQueryHandler(delete_plant_cb, pattern="^delete_"))
+
+    # Обработка кнопок меню
+    app.add_handler(MessageHandler(
+        filters.Regex("^(🌱 Мои растения|📚 База знаний|🔍 Диагностика|🛎 Напоминания|👨‍🌾 Чат с экспертом)$"),
+        handle_menu
+    ))
+
     logging.info("✅ Бот запущен...")
     app.run_polling()
 
