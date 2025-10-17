@@ -8,11 +8,12 @@ from telegram.ext import (
 )
 from database import upsert_user, add_plant, list_plants, get_plant, delete_plant
 
-# Этапы диалога
-ADD_NAME, ADD_TYPE, ADD_PHOTO, ADD_WATER_FREQ = range(4)
+# Этап диалога
+ADD_NAME = range(1)
 
 
 async def my_plants(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показать список растений пользователя"""
     user = update.effective_user
     user_id = upsert_user(
         chat_id=update.effective_chat.id,
@@ -32,7 +33,7 @@ async def my_plants(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = []
     for p in plants:
         pid, name, type_, photo, freq, last_watered, created = p
-        text += f"• {name} ({type_ or 'тип не указан'})\n"
+        text += f"• {name}\n"
         keyboard.append([InlineKeyboardButton(f"❌ Удалить {name}", callback_data=f"delete_{pid}")])
 
     keyboard.append([InlineKeyboardButton("➕ Добавить растение", callback_data="add_plant")])
@@ -40,46 +41,18 @@ async def my_plants(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def my_plants_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка кнопки 'Добавить растение'"""
     query = update.callback_query
     await query.answer()
     if query.data == "add_plant":
-        await query.message.reply_text("Введите название растения (например: «Фикус Бенджамина»):")
+        await query.message.reply_text("Введите название растения (например: «Фикус»):")
         return ADD_NAME
     return ConversationHandler.END
 
 
 async def add_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["plant_name"] = update.message.text.strip()
-    await update.message.reply_text("Укажите тип/вид растения (например: «фикус», «монстера», «суккулент»). Если не знаете — напишите «пропустить».")
-    return ADD_TYPE
-
-
-async def add_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.strip()
-    context.user_data["plant_type"] = None if text.lower() == "пропустить" else text
-    await update.message.reply_text("Отправьте фото растения или напишите «пропустить».")
-    return ADD_PHOTO
-
-
-async def add_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    photo_file_id = None
-    if update.message.photo:
-        photo = update.message.photo[-1]
-        photo_file_id = photo.file_id
-    context.user_data["photo_file_id"] = photo_file_id
-    await update.message.reply_text("Как часто поливать? Укажите число дней (например: 7). Если не уверены — напишите «пропустить».")
-    return ADD_WATER_FREQ
-
-
-async def add_water_freq(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.strip().lower()
-    watering_every_days = None
-    if text != "пропустить":
-        try:
-            watering_every_days = int(text)
-        except ValueError:
-            await update.message.reply_text("Пожалуйста, укажите число (например: 7) или напишите «пропустить».")
-            return ADD_WATER_FREQ
+    """Сохраняем растение только по названию"""
+    plant_name = update.message.text.strip()
 
     user = update.effective_user
     user_id = upsert_user(
@@ -88,20 +61,18 @@ async def add_water_freq(update: Update, context: ContextTypes.DEFAULT_TYPE):
         first_name=user.first_name,
         last_name=user.last_name,
     )
-    plant_id = add_plant(
-        user_id=user_id,
-        name=context.user_data.get("plant_name"),
-        type_=context.user_data.get("plant_type"),
-        photo_file_id=context.user_data.get("photo_file_id"),
-        watering_every_days=watering_every_days,
-    )
+    plant_id = add_plant(user_id=user_id, name=plant_name)
 
-    await send_plant_card(update, plant_id)
+    # Простая карточка без OpenFarm
+    text = f"*Карточка растения*\nНазвание: {plant_name}\nℹ️ Рекомендации пока не добавлены."
+    await update.message.reply_text(text, parse_mode="Markdown")
+
     context.user_data.clear()
     return ConversationHandler.END
 
 
 async def send_plant_card(update_or_message, plant_id: int):
+    """Показать карточку растения"""
     msg = update_or_message.message if hasattr(update_or_message, "message") else update_or_message
     plant = get_plant(plant_id)
     if not plant:
@@ -109,14 +80,7 @@ async def send_plant_card(update_or_message, plant_id: int):
         return
 
     pid, user_id, name, type_, photo, freq, last_watered, created = plant
-    text = (
-        f"*Карточка растения*\n"
-        f"Название: {name}\n"
-        f"Тип: {type_ or 'не указан'}\n"
-        f"Полив: каждые {freq or 'N/A'} дней\n"
-        f"Последний полив: {last_watered or 'нет данных'}\n"
-        f"Добавлено: {created.split('T')[0]}"
-    )
+    text = f"*Карточка растения*\nНазвание: {name}\nДобавлено: {created.split('T')[0]}\nℹ️ Рекомендации пока не добавлены."
 
     keyboard = [
         [InlineKeyboardButton("🔍 Диагностика по фото", callback_data=f"diag_photo_{pid}")],
@@ -132,6 +96,7 @@ async def send_plant_card(update_or_message, plant_id: int):
 
 
 async def delete_plant_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Удаление растения"""
     query = update.callback_query
     await query.answer()
     if query.data.startswith("delete_"):
@@ -141,13 +106,11 @@ async def delete_plant_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def build_profile_conversation():
+    """Диалог добавления растения (только название)"""
     return ConversationHandler(
         entry_points=[CallbackQueryHandler(my_plants_cb, pattern="^add_plant$")],
         states={
             ADD_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_name)],
-            ADD_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_type)],
-            ADD_PHOTO: [MessageHandler(filters.PHOTO | (filters.TEXT & ~filters.COMMAND), add_photo)],
-            ADD_WATER_FREQ: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_water_freq)],
         },
         fallbacks=[],
         allow_reentry=True,

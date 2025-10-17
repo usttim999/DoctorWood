@@ -16,6 +16,7 @@ from handlers.profile import my_plants, build_profile_conversation, delete_plant
 from handlers.diagnosis import handle_symptoms
 from handlers.recommendations import get_recommendations
 from handlers.diagnose_photo import diagnose_photo
+from handlers.trefle import build_trefle_conversation
 
 # Загружаем .env
 load_dotenv()
@@ -34,8 +35,9 @@ if not TOKEN:
 MAIN_KEYBOARD = [
     ["🌱 Мои растения", "📚 База знаний"],
     ["🔍 Диагностика", "🛎 Напоминания"],
-    ["👨‍🌾 Чат с экспертом"],
+    ["👨‍🌾 Чат с экспертом", "🌍 Trefle"],
 ]
+
 BACK_KEYBOARD = [["⬅️ Назад"]]
 
 
@@ -70,24 +72,43 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
     if text == "🌱 Мои растения":
-        # вызываем команду /myplants
         await my_plants(update, context)
-        await update.message.reply_text("Выберите действие:", reply_markup=ReplyKeyboardMarkup(BACK_KEYBOARD, resize_keyboard=True))
+        await update.message.reply_text(
+            "Выберите действие:",
+            reply_markup=ReplyKeyboardMarkup(BACK_KEYBOARD, resize_keyboard=True),
+        )
 
     elif text == "📚 База знаний":
-        await update.message.reply_text("📚 База знаний находится в разработке", reply_markup=ReplyKeyboardMarkup(BACK_KEYBOARD, resize_keyboard=True))
+        await update.message.reply_text(
+            "📚 База знаний находится в разработке",
+            reply_markup=ReplyKeyboardMarkup(BACK_KEYBOARD, resize_keyboard=True),
+        )
 
     elif text == "🔍 Диагностика":
         await diagnose_command(update, context)
 
     elif text == "🛎 Напоминания":
-        await update.message.reply_text("🛎 Напоминания находятся в разработке", reply_markup=ReplyKeyboardMarkup(BACK_KEYBOARD, resize_keyboard=True))
+        await update.message.reply_text(
+            "🛎 Напоминания находятся в разработке",
+            reply_markup=ReplyKeyboardMarkup(BACK_KEYBOARD, resize_keyboard=True),
+        )
 
     elif text == "👨‍🌾 Чат с экспертом":
-        await update.message.reply_text("👨‍🌾 Чат с агрономом находится в разработке", reply_markup=ReplyKeyboardMarkup(BACK_KEYBOARD, resize_keyboard=True))
+        await update.message.reply_text(
+            "👨‍🌾 Чат с агрономом находится в разработке",
+            reply_markup=ReplyKeyboardMarkup(BACK_KEYBOARD, resize_keyboard=True),
+        )
 
     elif text == "⬅️ Назад":
         await start(update, context)
+
+    elif text == "🌍 Trefle":
+        await update.message.reply_text(
+            "Введите название растения для поиска в базе Trefle.\n\n"
+            "Например: `/trefle ficus`",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardMarkup(BACK_KEYBOARD, resize_keyboard=True),
+        )
 
 
 def main():
@@ -109,11 +130,14 @@ def main():
 
     # Callback для удаления растения
     app.add_handler(CallbackQueryHandler(delete_plant_cb, pattern="^delete_"))
+    app.add_handler(build_trefle_conversation())
 
     # Обработка кнопок меню (включая Назад)
     app.add_handler(
         MessageHandler(
-            filters.Regex("^(🌱 Мои растения|📚 База знаний|🔍 Диагностика|🛎 Напоминания|👨‍🌾 Чат с экспертом|⬅️ Назад)$"),
+            filters.Regex(
+                "^(🌱 Мои растения|📚 База знаний|🔍 Диагностика|🛎 Напоминания|👨‍🌾 Чат с экспертом|⬅️ Назад)$"
+            ),
             handle_menu,
         )
     )
