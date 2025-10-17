@@ -3,6 +3,8 @@ import requests
 import base64
 from telegram import Update
 from telegram.ext import ContextTypes
+from dotenv import load_dotenv
+load_dotenv()
 
 API_KEY = os.getenv("PLANT_API_KEY")
 

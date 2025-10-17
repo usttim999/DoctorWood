@@ -1,7 +1,7 @@
 from telegram import Update
-from telegram.ext import CallbackContext
+from telegram.ext import ContextTypes
 
-def start(update: Update, context: CallbackContext):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /start"""
     welcome_text = """
 🌿 *Добро пожаловать в бот для диагностики растений!*
@@ -19,9 +19,10 @@ def start(update: Update, context: CallbackContext):
 
 Опишите симптомы вашего растения, и я помогу определить проблему!
     """
-    update.message.reply_text(welcome_text, parse_mode='Markdown')
+    await update.message.reply_text(welcome_text, parse_mode='Markdown')
 
-def help_command(update: Update, context: CallbackContext):
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /help"""
     help_text = """
 *Как пользоваться ботом:*
@@ -30,4 +31,4 @@ def help_command(update: Update, context: CallbackContext):
 2. Опишите симптомы вашего растения
 3. Я проанализирую симптомы и дам рекомендации
     """
-    update.message.reply_text(help_text, parse_mode='Markdown')
+    await update.message.reply_text(help_text, parse_mode='Markdown')

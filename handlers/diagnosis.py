@@ -1,19 +1,19 @@
 from telegram import Update
-from telegram.ext import CallbackContext
+from telegram.ext import ContextTypes
 from config import PLANT_DISEASES
 
 
-def diagnose_plant(update: Update, context: CallbackContext):
+async def diagnose_plant(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Начало диагностики"""
     text = """
 🔍 *Диагностика проблем растений*
 
 Опишите симптомы, которые вы заметили у вашего растения
     """
-    update.message.reply_text(text, parse_mode='Markdown')
+    await update.message.reply_text(text, parse_mode='Markdown')
 
 
-def handle_symptoms(update: Update, context: CallbackContext):
+async def handle_symptoms(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка описания симптомов"""
     user_text = update.message.text.lower()
 
@@ -37,4 +37,4 @@ def handle_symptoms(update: Update, context: CallbackContext):
     else:
         response = "❌ Не удалось определить проблему. Опишите симптомы подробнее."
 
-    update.message.reply_text(response, parse_mode='Markdown')
+    await update.message.reply_text(response, parse_mode='Markdown')
