@@ -1,3 +1,4 @@
+import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ContextTypes,
@@ -10,6 +11,8 @@ from database import upsert_user, add_plant, list_plants, get_plant, delete_plan
 
 # Этап диалога
 ADD_NAME = range(1)
+
+OPENFARM_URL = "https://openfarm.cc/api/v1/crops?filter="
 
 
 async def my_plants(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -51,7 +54,7 @@ async def my_plants_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def add_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Сохраняем растение только по названию"""
+    """Сохраняем растение только по названию и показываем рекомендации"""
     plant_name = update.message.text.strip()
 
     user = update.effective_user
@@ -63,12 +66,60 @@ async def add_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     plant_id = add_plant(user_id=user_id, name=plant_name)
 
-    # Простая карточка без OpenFarm
-    text = f"*Карточка растения*\nНазвание: {plant_name}\nℹ️ Рекомендации пока не добавлены."
+    # Получаем рекомендации из OpenFarm
+    care_text = await fetch_openfarm_care(plant_name)
+
+    text = f"*Карточка растения*\nНазвание: {plant_name}\n\n{care_text}"
     await update.message.reply_text(text, parse_mode="Markdown")
 
     context.user_data.clear()
     return ConversationHandler.END
+
+
+# Словарь для перевода популярных русских названий в английские
+NAME_MAP = {
+    "фикус": "ficus",
+    "монстера": "monstera",
+    "суккулент": "succulent",
+    "орхидея": "orchid",
+    "алое": "aloe",
+    "кактус": "cactus",
+}
+
+async def fetch_openfarm_care(plant_name: str) -> str:
+    """Запрос к OpenFarm API для получения рекомендаций"""
+    try:
+        # если название на русском — подставляем английский аналог
+        query = NAME_MAP.get(plant_name.lower(), plant_name)
+
+        response = requests.get(OPENFARM_URL + query, timeout=15)
+        if not response.ok:
+            return f"⚠️ Ошибка OpenFarm API ({response.status_code})"
+
+        # проверяем, что ответ действительно JSON
+        if "application/json" not in response.headers.get("Content-Type", ""):
+            return "ℹ️ OpenFarm вернул неожиданный ответ. Попробуйте ввести название на английском."
+
+        data = response.json()
+        crops = data.get("data", [])
+        if not crops:
+            return "ℹ️ Рекомендации по уходу пока не найдены. Попробуйте ввести название на английском."
+
+        crop = crops[0]
+        attr = crop.get("attributes", {})
+
+        text = ""
+        if attr.get("description"):
+            text += f"📖 {attr['description']}\n\n"
+        if attr.get("sun_requirements"):
+            text += f"☀️ Свет: {attr['sun_requirements']}\n"
+        if attr.get("sowing_method"):
+            text += f"🌱 Посев: {attr['sowing_method']}\n"
+
+        return text or "ℹ️ Рекомендации по уходу пока не найдены."
+    except Exception as e:
+        return f"⚠️ Ошибка при обращении к OpenFarm: {e}"
+
 
 
 async def send_plant_card(update_or_message, plant_id: int):
@@ -80,7 +131,9 @@ async def send_plant_card(update_or_message, plant_id: int):
         return
 
     pid, user_id, name, type_, photo, freq, last_watered, created = plant
-    text = f"*Карточка растения*\nНазвание: {name}\nДобавлено: {created.split('T')[0]}\nℹ️ Рекомендации пока не добавлены."
+    care_text = await fetch_openfarm_care(name)
+
+    text = f"*Карточка растения*\nНазвание: {name}\nДобавлено: {created.split('T')[0]}\n\n{care_text}"
 
     keyboard = [
         [InlineKeyboardButton("🔍 Диагностика по фото", callback_data=f"diag_photo_{pid}")],

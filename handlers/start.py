@@ -21,7 +21,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     await update.message.reply_text(welcome_text, parse_mode='Markdown')
 
-
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /help"""
     help_text = """

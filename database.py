@@ -3,6 +3,8 @@ import sqlite3
 import psycopg2
 from contextlib import contextmanager
 from datetime import datetime
+from urllib.parse import urlparse
+
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 USE_POSTGRES = DATABASE_URL is not None
@@ -101,74 +103,45 @@ def upsert_user(chat_id: int, username: str, first_name: str, last_name: str):
         conn.commit()
         return user_id
 
-
 def add_plant(user_id: int, name: str, type_: str = None, photo_file_id: str = None, watering_every_days: int = None):
     with get_conn() as conn:
         cur = conn.cursor()
-        now = datetime.utcnow()
-
-        if USE_POSTGRES:
-            cur.execute("""
-                INSERT INTO plants (user_id, name, type, photo_file_id, watering_every_days, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
-            """, (user_id, name, type_, photo_file_id, watering_every_days, now))
-            plant_id = cur.fetchone()[0]
-        else:
-            cur.execute("""
-                INSERT INTO plants (user_id, name, type, photo_file_id, watering_every_days, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (user_id, name, type_, photo_file_id, watering_every_days, now.isoformat()))
-            plant_id = cur.lastrowid
-
+        now = datetime.utcnow().isoformat()
+        cur.execute("""
+            INSERT INTO plants (user_id, name, type, photo_file_id, watering_every_days, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (user_id, name, type_, photo_file_id, watering_every_days, now))
         conn.commit()
-        return plant_id
+        return cur.lastrowid
 
 
 def list_plants(user_id: int):
     with get_conn() as conn:
         cur = conn.cursor()
-        if USE_POSTGRES:
-            cur.execute("""
-                SELECT id, name, type, photo_file_id, watering_every_days, last_watered_at, created_at
-                FROM plants
-                WHERE user_id = %s
-                ORDER BY created_at DESC
-            """, (user_id,))
-        else:
-            cur.execute("""
-                SELECT id, name, type, photo_file_id, watering_every_days, last_watered_at, created_at
-                FROM plants
-                WHERE user_id = ?
-                ORDER BY created_at DESC
-            """, (user_id,))
+        cur.execute("""
+            SELECT id, name, type, photo_file_id, watering_every_days, last_watered_at, created_at
+            FROM plants
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+        """, (user_id,))
         return cur.fetchall()
 
 
 def get_plant(plant_id: int):
     with get_conn() as conn:
         cur = conn.cursor()
-        if USE_POSTGRES:
-            cur.execute("""
-                SELECT id, user_id, name, type, photo_file_id, watering_every_days, last_watered_at, created_at
-                FROM plants
-                WHERE id = %s
-            """, (plant_id,))
-        else:
-            cur.execute("""
-                SELECT id, user_id, name, type, photo_file_id, watering_every_days, last_watered_at, created_at
-                FROM plants
-                WHERE id = ?
-            """, (plant_id,))
+        cur.execute("""
+            SELECT id, user_id, name, type, photo_file_id, watering_every_days, last_watered_at, created_at
+            FROM plants
+            WHERE id = ?
+        """, (plant_id,))
         return cur.fetchone()
-
 
 def delete_plant(plant_id: int):
     with get_conn() as conn:
         cur = conn.cursor()
-        if USE_POSTGRES:
-            cur.execute("DELETE FROM care_history WHERE plant_id = %s", (plant_id,))
-            cur.execute("DELETE FROM plants WHERE id = %s", (plant_id,))
-        else:
-            cur.execute("DELETE FROM care_history WHERE plant_id = ?", (plant_id,))
-            cur.execute("DELETE FROM plants WHERE id = ?", (plant_id,))
+        # сначала удалим историю ухода
+        cur.execute("DELETE FROM care_history WHERE plant_id = ?", (plant_id,))
+        # затем само растение
+        cur.execute("DELETE FROM plants WHERE id = ?", (plant_id,))
         conn.commit()
