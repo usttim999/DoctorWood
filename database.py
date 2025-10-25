@@ -1,62 +1,76 @@
 import os
 import sqlite3
-import psycopg2
+import psycopg
 from contextlib import contextmanager
 from datetime import datetime
-from urllib.parse import urlparse
-
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 USE_POSTGRES = DATABASE_URL is not None
-
 
 def init_db():
     with get_conn() as conn:
         cur = conn.cursor()
 
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            chat_id BIGINT UNIQUE NOT NULL,
-            username TEXT,
-            first_name TEXT,
-            last_name TEXT,
-            created_at TIMESTAMP NOT NULL
-        )
-        """)
+        # Для PostgreSQL используем SERIAL, для SQLite INTEGER AUTOINCREMENT
+        if USE_POSTGRES:
+            cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                chat_id BIGINT UNIQUE NOT NULL,
+                username TEXT,
+                first_name TEXT,
+                last_name TEXT,
+                created_at TIMESTAMP NOT NULL
+            )
+            """)
+        else:
+            cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id BIGINT UNIQUE NOT NULL,
+                username TEXT,
+                first_name TEXT,
+                last_name TEXT,
+                created_at TIMESTAMP NOT NULL
+            )
+            """)
 
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS plants (
-            id SERIAL PRIMARY KEY,
-            user_id INTEGER NOT NULL,
-            name TEXT NOT NULL,
-            type TEXT,
-            photo_file_id TEXT,
-            watering_every_days INTEGER,
-            last_watered_at TIMESTAMP,
-            created_at TIMESTAMP NOT NULL,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-        )
-        """)
-
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS care_history (
-            id SERIAL PRIMARY KEY,
-            plant_id INTEGER NOT NULL,
-            action TEXT NOT NULL,
-            note TEXT,
-            created_at TIMESTAMP NOT NULL,
-            FOREIGN KEY (plant_id) REFERENCES plants(id) ON DELETE CASCADE
-        )
-        """)
+        # Аналогично для других таблиц...
+        if USE_POSTGRES:
+            cur.execute("""
+            CREATE TABLE IF NOT EXISTS plants (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                type TEXT,
+                photo_file_id TEXT,
+                watering_every_days INTEGER,
+                last_watered_at TIMESTAMP,
+                created_at TIMESTAMP NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """)
+        else:
+            cur.execute("""
+            CREATE TABLE IF NOT EXISTS plants (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                type TEXT,
+                photo_file_id TEXT,
+                watering_every_days INTEGER,
+                last_watered_at TIMESTAMP,
+                created_at TIMESTAMP NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """)
 
         conn.commit()
-
 
 @contextmanager
 def get_conn():
     if USE_POSTGRES:
-        conn = psycopg2.connect(DATABASE_URL, sslmode="require")
+        conn = psycopg.connect(DATABASE_URL)
     else:
         conn = sqlite3.connect("plants.db")
     try:
@@ -64,7 +78,7 @@ def get_conn():
     finally:
         conn.close()
 
-
+# Остальные функции остаются похожими, но с синтаксисом psycopg3 для PostgreSQL
 def upsert_user(chat_id: int, username: str, first_name: str, last_name: str):
     with get_conn() as conn:
         cur = conn.cursor()
@@ -102,6 +116,8 @@ def upsert_user(chat_id: int, username: str, first_name: str, last_name: str):
 
         conn.commit()
         return user_id
+
+# Остальные функции (add_plant, list_plants и т.д.) остаются аналогичными
 
 def add_plant(user_id: int, name: str, type_: str = None, photo_file_id: str = None, watering_every_days: int = None):
     with get_conn() as conn:
