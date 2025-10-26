@@ -31,7 +31,7 @@ from handlers.recommendations import get_recommendations
 from handlers.diagnose_photo import diagnose_photo
 from handlers.trefle import build_trefle_conversation
 from handlers.start import start, help_command
-
+from handlers.gigachat_gardener import build_gardener_conversation
 # Загружаем .env
 load_dotenv()
 
@@ -214,6 +214,9 @@ def main():
 
     # Диагностика по фото
     app.add_handler(MessageHandler(filters.PHOTO, diagnose_photo))
+
+    # AI-садовод
+    app.add_handler(build_gardener_conversation())
 
     # Callback для удаления растения
     app.add_handler(CallbackQueryHandler(delete_plant_cb, pattern="^delete_"))
