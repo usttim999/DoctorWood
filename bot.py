@@ -1,7 +1,7 @@
 import logging
 import os
 from dotenv import load_dotenv
-from telegram import ReplyKeyboardMarkup, Update
+from telegram import ReplyKeyboardMarkup, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -9,10 +9,23 @@ from telegram.ext import (
     CallbackQueryHandler,
     ContextTypes,
     filters,
+    ConversationHandler
 )
 
-from database import init_db
-from handlers.profile import my_plants, build_profile_conversation, delete_plant_cb
+from database import (
+    init_db,
+    get_plants_needing_watering,
+    mark_watered
+)
+from handlers.profile import (
+    my_plants,
+    build_profile_conversation,
+    delete_plant_cb,
+    setup_reminders_cb,
+    handle_interval_selection,
+    handle_custom_interval,
+    SET_WATERING_INTERVAL
+)
 from handlers.diagnosis import handle_symptoms
 from handlers.recommendations import get_recommendations
 from handlers.diagnose_photo import diagnose_photo
@@ -69,7 +82,6 @@ async def diagnose_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
-    user = update.effective_user
 
     if text == "🌱 Мои растения":
         await my_plants(update, context)
@@ -90,7 +102,6 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Введите название растения для поиска в базе Trefle:",
             reply_markup=ReplyKeyboardMarkup([["⬅️ Назад"]], resize_keyboard=True),
         )
-        # Запускаем диалог Trefle
         from handlers.trefle import trefle_start
         await trefle_start(update, context)
 
@@ -111,12 +122,82 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await start(update, context)
 
 
-def main():
-    # Инициализация БД
-    init_db()
+async def check_watering_reminders(context: ContextTypes.DEFAULT_TYPE):
+    """Проверка растений, которые нужно полить"""
+    plants_to_water = get_plants_needing_watering()
 
-    # Создание приложения с более надёжными настройками
+    for plant in plants_to_water:
+        plant_id, plant_name, interval, last_watered, chat_id = plant
+        message = (
+            f"💧 *Напоминание о поливе*\n\n"
+            f"Растение *{plant_name}* пора полить!\n"
+            f"Последний полив: {last_watered.split('T')[0]}\n"
+            f"Интервал: каждые {interval} дней\n\n"
+            f"После полива нажмите кнопку ниже 👇"
+        )
+
+        keyboard = [
+            [InlineKeyboardButton("✅ Полил(а)", callback_data=f"watered_{plant_id}")],
+            [InlineKeyboardButton("🌱 Мои растения", callback_data="show_plants")]
+        ]
+
+        try:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=message,
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        except Exception as e:
+            logging.error(f"Не удалось отправить напоминание: {e}")
+
+
+async def handle_watered_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка отметки о поливе"""
+    query = update.callback_query
+    await query.answer()
+
+    if query.data.startswith("watered_"):
+        plant_id = int(query.data.split("_")[1])
+        mark_watered(plant_id)
+
+        await query.edit_message_text(
+            "✅ *Отлично!* Растение полито.\n\n"
+            "Следующее напоминание придёт согласно установленному графику.",
+            parse_mode="Markdown"
+        )
+
+
+def main():
+    init_db()
     app = Application.builder().token(TOKEN).build()
+
+    # Настройка JobQueue для напоминаний
+    job_queue = app.job_queue
+    if job_queue:
+        job_queue.run_repeating(
+            check_watering_reminders,
+            interval=3600,  # Проверка каждый час
+            first=10
+        )
+
+    # Обработчики напоминаний
+    app.add_handler(CallbackQueryHandler(handle_watered_callback, pattern="^watered_"))
+
+    # ConversationHandler для напоминаний
+    reminder_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(setup_reminders_cb, pattern="^reminders_")],
+        states={
+            SET_WATERING_INTERVAL: [
+                CallbackQueryHandler(handle_interval_selection, pattern="^interval_"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_interval)
+            ],
+        },
+        fallbacks=[],
+        allow_reentry=True,
+        per_message=False
+    )
+    app.add_handler(reminder_conv)
 
     # Команды
     app.add_handler(CommandHandler("start", start))
@@ -147,23 +228,18 @@ def main():
         )
     )
 
-    # Обработка симптомов (только текст, не команды)
+    # Обработка симптомов
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_symptoms))
-
-    # Убедись, что старый бот остановлен!
-    logging.info("🔄 Останавливаем старые процессы...")
 
     logging.info("✅ Бот запускается...")
 
-    # Запуск с обработкой конфликтов
     try:
         app.run_polling(
             allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True  # Важно! Игнорирует старые сообщения
+            drop_pending_updates=True
         )
     except Exception as e:
         logging.error(f"❌ Ошибка запуска: {e}")
-        # При конфликте ждём и перезапускаем
         import time
         time.sleep(10)
         app.run_polling(drop_pending_updates=True)

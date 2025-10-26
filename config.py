@@ -21,3 +21,10 @@ PLANT_DISEASES = {
         'prevention': 'Регулярно опрыскивайте растения, поддерживайте влажность'
     }
 }
+
+# Настройки напоминаний
+WATERING_REMINDERS = {
+    'check_interval_hours': 1,
+    'max_interval_days': 30,
+    'min_interval_days': 1
+}

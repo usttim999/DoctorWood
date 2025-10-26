@@ -2,7 +2,7 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 
-DATABASE_URL = None  # Принудительно используем SQLite
+DATABASE_URL = None
 USE_POSTGRES = False
 
 def init_db():
@@ -55,7 +55,6 @@ def get_conn():
     finally:
         conn.close()
 
-# Остальные функции остаются без изменений
 def upsert_user(chat_id: int, username: str, first_name: str, last_name: str):
     with get_conn() as conn:
         cur = conn.cursor()
@@ -79,7 +78,6 @@ def upsert_user(chat_id: int, username: str, first_name: str, last_name: str):
         conn.commit()
         return user_id
 
-
 def add_plant(user_id: int, name: str, type_: str = None, photo_file_id: str = None, watering_every_days: int = None):
     with get_conn() as conn:
         cur = conn.cursor()
@@ -91,7 +89,6 @@ def add_plant(user_id: int, name: str, type_: str = None, photo_file_id: str = N
         conn.commit()
         return cur.lastrowid
 
-
 def list_plants(user_id: int):
     with get_conn() as conn:
         cur = conn.cursor()
@@ -102,7 +99,6 @@ def list_plants(user_id: int):
             ORDER BY created_at DESC
         """, (user_id,))
         return cur.fetchall()
-
 
 def get_plant(plant_id: int):
     with get_conn() as conn:
@@ -117,8 +113,42 @@ def get_plant(plant_id: int):
 def delete_plant(plant_id: int):
     with get_conn() as conn:
         cur = conn.cursor()
-        # сначала удалим историю ухода
         cur.execute("DELETE FROM care_history WHERE plant_id = ?", (plant_id,))
-        # затем само растение
         cur.execute("DELETE FROM plants WHERE id = ?", (plant_id,))
+        conn.commit()
+
+def set_watering_schedule(plant_id: int, watering_interval_days: int):
+    """Установить график полива для растения"""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE plants 
+            SET watering_every_days = ?, last_watered_at = ?
+            WHERE id = ?
+        """, (watering_interval_days, datetime.utcnow().isoformat(), plant_id))
+        conn.commit()
+
+def get_plants_needing_watering():
+    """Получить список растений, которые нужно полить"""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT p.id, p.name, p.watering_every_days, p.last_watered_at, u.chat_id
+            FROM plants p
+            JOIN users u ON p.user_id = u.id
+            WHERE p.watering_every_days IS NOT NULL
+            AND p.last_watered_at IS NOT NULL
+            AND julianday('now') - julianday(p.last_watered_at) > p.watering_every_days
+        """)
+        return cur.fetchall()
+
+def mark_watered(plant_id: int):
+    """Отметить растение как политое"""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE plants 
+            SET last_watered_at = ?
+            WHERE id = ?
+        """, (datetime.utcnow().isoformat(), plant_id))
         conn.commit()

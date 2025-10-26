@@ -6,10 +6,19 @@ from telegram.ext import (
     CallbackQueryHandler,
     filters,
 )
-from database import upsert_user, add_plant, list_plants, get_plant, delete_plant
+from database import (
+    upsert_user,
+    add_plant,
+    list_plants,
+    get_plant,
+    delete_plant,
+    set_watering_schedule,
+    mark_watered
+)
 
-# Этап диалога
+# Этапы диалога
 ADD_NAME = range(1)
+SET_WATERING_INTERVAL = range(2)
 
 
 async def my_plants(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -33,8 +42,15 @@ async def my_plants(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = []
     for p in plants:
         pid, name, type_, photo, freq, last_watered, created = p
-        text += f"• **{name}**\n"
-        keyboard.append([InlineKeyboardButton(f"🗑️ Удалить {name}", callback_data=f"delete_{pid}")])
+        text += f"• **{name}**"
+        if freq:
+            text += f" 💧 каждые {freq} дней"
+        text += "\n"
+
+        keyboard.append([
+            InlineKeyboardButton(f"💧 Напоминания {name}", callback_data=f"reminders_{pid}"),
+            InlineKeyboardButton(f"🗑️ Удалить {name}", callback_data=f"delete_{pid}")
+        ])
 
     keyboard.append([InlineKeyboardButton("➕ Добавить растение", callback_data="add_plant")])
     await update.message.reply_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
@@ -66,7 +82,6 @@ async def add_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     plant_id = add_plant(user_id=user_id, name=plant_name)
 
-    # Базовая информация по популярным растениям
     care_text = get_basic_care_info(plant_name)
 
     text = f"🌿 *Растение добавлено!*\n\n*Название:* {plant_name}\n\n{care_text}"
@@ -89,48 +104,11 @@ def get_basic_care_info(plant_name: str) -> str:
         "алое": "💧 *Полив:* умеренный, зимой реже\n☀️ *Свет:* яркий рассеянный\n🌡️ *Температура:* 18-25°C\n🌿 *Уход:* не требует частого ухода",
     }
 
-    # Поиск совпадения
     for key, info in care_info.items():
         if key in plant_name_lower:
             return info
 
-    # Общая информация для неизвестных растений
     return "💡 *Общие рекомендации:*\n• Полив: когда верхний слой почвы подсох\n• Свет: яркий рассеянный\n• Температура: 18-25°C\n• Удобрения: весной и летом\n\nДля точной диагностики используйте функцию 🔍 Диагностика"
-
-
-async def send_plant_card(update_or_message, plant_id: int):
-    """Показать карточку растения"""
-    msg = update_or_message.message if hasattr(update_or_message, "message") else update_or_message
-    plant = get_plant(plant_id)
-    if not plant:
-        await msg.reply_text("❌ Не удалось найти растение.")
-        return
-
-    pid, user_id, name, type_, photo, freq, last_watered, created = plant
-    care_text = get_basic_care_info(name)
-
-    text = f"🌿 *Карточка растения*\n\n*Название:* {name}\n*Добавлено:* {created.split('T')[0]}\n\n{care_text}"
-
-    keyboard = [
-        [InlineKeyboardButton("🔍 Диагностика по фото", callback_data=f"diag_photo_{pid}")],
-        [InlineKeyboardButton("💧 Отметить полив", callback_data=f"water_{pid}")],
-        [InlineKeyboardButton("📝 Добавить заметку", callback_data=f"note_{pid}")],
-        [InlineKeyboardButton("🗑️ Удалить растение", callback_data=f"delete_{pid}")],
-    ]
-
-    if photo:
-        await msg.reply_photo(
-            photo=photo,
-            caption=text,
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    else:
-        await msg.reply_text(
-            text,
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
 
 
 async def delete_plant_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -144,6 +122,100 @@ async def delete_plant_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                       parse_mode="Markdown")
 
 
+async def setup_reminders_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Настройка напоминаний о поливе"""
+    query = update.callback_query
+    await query.answer()
+
+    if query.data.startswith("reminders_"):
+        plant_id = int(query.data.split("_")[1])
+        context.user_data['setup_plant_id'] = plant_id
+
+        plant = get_plant(plant_id)
+        if plant:
+            pid, user_id, name, type_, photo, freq, last_watered, created = plant
+
+            text = (
+                f"🛎 *Настройка напоминаний для {name}*\n\n"
+                f"Как часто нужно поливать это растение?\n"
+                f"Выберите интервал или введите своё значение:"
+            )
+
+            keyboard = [
+                [InlineKeyboardButton("💧 Каждый день", callback_data="interval_1")],
+                [InlineKeyboardButton("💧 Каждые 3 дня", callback_data="interval_3")],
+                [InlineKeyboardButton("💧 Раз в неделю", callback_data="interval_7")],
+                [InlineKeyboardButton("💧 Раз в 2 недели", callback_data="interval_14")],
+                [InlineKeyboardButton("📝 Ввести свой интервал", callback_data="custom_interval")]
+            ]
+
+            await query.message.reply_text(
+                text,
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return SET_WATERING_INTERVAL
+
+
+async def handle_interval_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка выбора интервала полива"""
+    query = update.callback_query
+    await query.answer()
+
+    if query.data.startswith("interval_"):
+        interval = int(query.data.split("_")[1])
+        plant_id = context.user_data.get('setup_plant_id')
+
+        if plant_id:
+            set_watering_schedule(plant_id, interval)
+            plant = get_plant(plant_id)
+
+            await query.message.reply_text(
+                f"✅ *Напоминания настроены!*\n\n"
+                f"Растение *{plant[2]}* будет напоминать о поливе каждые {interval} дней.\n\n"
+                f"Бот пришлёт уведомление, когда придёт время полить растение.",
+                parse_mode="Markdown"
+            )
+
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    elif query.data == "custom_interval":
+        await query.message.reply_text(
+            "📝 Введите интервал полива в днях:\n\n"
+            "*Пример:* 5 (полив каждые 5 дней)",
+            parse_mode="Markdown"
+        )
+        return SET_WATERING_INTERVAL
+
+
+async def handle_custom_interval(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка пользовательского интервала"""
+    try:
+        interval = int(update.message.text.strip())
+        if interval < 1 or interval > 30:
+            await update.message.reply_text("❌ Введите число от 1 до 30 дней")
+            return SET_WATERING_INTERVAL
+
+        plant_id = context.user_data.get('setup_plant_id')
+        if plant_id:
+            set_watering_schedule(plant_id, interval)
+            plant = get_plant(plant_id)
+
+            await update.message.reply_text(
+                f"✅ *Напоминания настроены!*\n\n"
+                f"Растение *{plant[2]}* будет напоминать о поливе каждые {interval} дней.",
+                parse_mode="Markdown"
+            )
+
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    except ValueError:
+        await update.message.reply_text("❌ Пожалуйста, введите число")
+        return SET_WATERING_INTERVAL
+
+
 def build_profile_conversation():
     """Диалог добавления растения"""
     return ConversationHandler(
@@ -153,4 +225,5 @@ def build_profile_conversation():
         },
         fallbacks=[],
         allow_reentry=True,
+        per_message=False
     )
