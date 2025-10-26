@@ -13,7 +13,7 @@ from telegram.ext import (
 
 from database import init_db
 from handlers.profile import my_plants, build_profile_conversation, delete_plant_cb
-from handlers.diagnosis import diagnose_plant, handle_symptoms
+from handlers.diagnosis import handle_symptoms
 from handlers.recommendations import get_recommendations
 from handlers.diagnose_photo import diagnose_photo
 from handlers.trefle import build_trefle_conversation
@@ -34,50 +34,77 @@ if not TOKEN:
 
 # Главное меню
 MAIN_KEYBOARD = [
-    ["🌱 Мои растения", "📚 База знаний"],
-    ["🔍 Диагностика", "🛎 Напоминания"],
-    ["👨‍🌾 Чат с экспертом", "🌍 Trefle"],
+    ["🌱 Мои растения", "🔍 Диагностика"],
+    ["📚 Рекомендации", "🌍 Поиск растений"],
+    ["👨‍🌾 Чат с агрономом"]
 ]
 
-BACK_KEYBOARD = [["⬅️ Назад"]]
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    reply_markup = ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
+    await update.message.reply_text(
+        "🌿 *Добро пожаловать в DoctorWood!*\n\nВыберите действие:",
+        parse_mode="Markdown",
+        reply_markup=reply_markup,
+    )
+
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "*Доступные команды:*\n"
+        "/start - главное меню\n"
+        "/myplants - мои растения\n"
+        "/diagnose - диагностика по фото\n"
+        "/recommendations - рекомендации по уходу\n",
+        parse_mode="Markdown",
+    )
 
 
 async def diagnose_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🔍 Для диагностики пришлите фото вашего растения 🖼️",
-        reply_markup=ReplyKeyboardMarkup(BACK_KEYBOARD, resize_keyboard=True),
+        "📷 Пришлите фото растения для диагностики",
+        reply_markup=ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True),
     )
 
 
 async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
+    user = update.effective_user
 
     if text == "🌱 Мои растения":
         await my_plants(update, context)
-        await update.message.reply_text(
-            "Выберите действие:",
-            reply_markup=ReplyKeyboardMarkup(BACK_KEYBOARD, resize_keyboard=True),
-        )
-
-    elif text == "📚 База знаний":
-        await update.message.reply_text(
-            "📚 База знаний находится в разработке",
-            reply_markup=ReplyKeyboardMarkup(BACK_KEYBOARD, resize_keyboard=True),
-        )
 
     elif text == "🔍 Диагностика":
-        await diagnose_command(update, context)
-
-    elif text == "🛎 Напоминания":
         await update.message.reply_text(
-            "🛎 Напоминания находятся в разработке",
-            reply_markup=ReplyKeyboardMarkup(BACK_KEYBOARD, resize_keyboard=True),
+            "Выберите тип диагностики:\n"
+            "• 📷 Пришлите фото для диагностики по фото\n"
+            "• 📝 Опишите симптомы текстом",
+            reply_markup=ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True),
         )
 
-    elif text == "👨‍🌾 Чат с экспертом":
+    elif text == "📚 Рекомендации":
+        await get_recommendations(update, context)
+
+    elif text == "🌍 Поиск растений":
         await update.message.reply_text(
-            "👨‍🌾 Чат с агрономом находится в разработке",
-            reply_markup=ReplyKeyboardMarkup(BACK_KEYBOARD, resize_keyboard=True),
+            "Введите название растения для поиска в базе Trefle:",
+            reply_markup=ReplyKeyboardMarkup([["⬅️ Назад"]], resize_keyboard=True),
+        )
+        # Запускаем диалог Trefle
+        from handlers.trefle import trefle_start
+        await trefle_start(update, context)
+
+    elif text == "👨‍🌾 Чат с агрономом":
+        await update.message.reply_text(
+            "👨‍🌾 *Чат с агрономом*\n\n"
+            "Эта функция находится в разработке 🛠️\n\n"
+            "Скоро вы сможете:\n"
+            "• 💬 Задавать вопросы профессиональным агрономам\n"
+            "• 📸 Получать консультации по вашим растениям\n"
+            "• 🌿 Получать персональные рекомендации\n\n"
+            "А пока используйте автоматическую диагностику растений! 🔍",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
         )
 
     elif text == "⬅️ Назад":
@@ -88,7 +115,7 @@ def main():
     # Инициализация БД
     init_db()
 
-    # Создание приложения
+    # Создание приложения с более надёжными настройками
     app = Application.builder().token(TOKEN).build()
 
     # Команды
@@ -114,17 +141,32 @@ def main():
     app.add_handler(
         MessageHandler(
             filters.Regex(
-                "^(🌱 Мои растения|📚 База знаний|🔍 Диагностика|🛎 Напоминания|👨‍🌾 Чат с экспертом|⬅️ Назад)$"
+                "^(🌱 Мои растения|🔍 Диагностика|📚 Рекомендации|🌍 Поиск растений|👨‍🌾 Чат с агрономом|⬅️ Назад)$"
             ),
             handle_menu,
         )
     )
 
-    # Обработка симптомов
+    # Обработка симптомов (только текст, не команды)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_symptoms))
 
-    logging.info("✅ Бот запущен...")
-    app.run_polling()
+    # Убедись, что старый бот остановлен!
+    logging.info("🔄 Останавливаем старые процессы...")
+
+    logging.info("✅ Бот запускается...")
+
+    # Запуск с обработкой конфликтов
+    try:
+        app.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True  # Важно! Игнорирует старые сообщения
+        )
+    except Exception as e:
+        logging.error(f"❌ Ошибка запуска: {e}")
+        # При конфликте ждём и перезапускаем
+        import time
+        time.sleep(10)
+        app.run_polling(drop_pending_updates=True)
 
 
 if __name__ == "__main__":

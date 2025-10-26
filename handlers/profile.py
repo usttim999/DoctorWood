@@ -1,4 +1,3 @@
-import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ContextTypes,
@@ -11,8 +10,6 @@ from database import upsert_user, add_plant, list_plants, get_plant, delete_plan
 
 # Этап диалога
 ADD_NAME = range(1)
-
-OPENFARM_URL = "https://openfarm.cc/api/v1/crops?filter="
 
 
 async def my_plants(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -27,17 +24,17 @@ async def my_plants(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     plants = list_plants(user_id)
     if not plants:
-        text = "У вас пока нет растений. Добавьте первое с помощью кнопки ниже."
+        text = "🌱 *У вас пока нет растений*\n\nДобавьте первое растение с помощью кнопки ниже 👇"
         keyboard = [[InlineKeyboardButton("➕ Добавить растение", callback_data="add_plant")]]
-        await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        await update.message.reply_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
         return
 
-    text = "*Мои растения:*\n\n"
+    text = "🌿 *Мои растения:*\n\n"
     keyboard = []
     for p in plants:
         pid, name, type_, photo, freq, last_watered, created = p
-        text += f"• {name}\n"
-        keyboard.append([InlineKeyboardButton(f"❌ Удалить {name}", callback_data=f"delete_{pid}")])
+        text += f"• **{name}**\n"
+        keyboard.append([InlineKeyboardButton(f"🗑️ Удалить {name}", callback_data=f"delete_{pid}")])
 
     keyboard.append([InlineKeyboardButton("➕ Добавить растение", callback_data="add_plant")])
     await update.message.reply_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
@@ -48,13 +45,16 @@ async def my_plants_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     if query.data == "add_plant":
-        await query.message.reply_text("Введите название растения (например: «Фикус»):")
+        await query.message.reply_text(
+            "🌱 *Добавление растения*\n\nВведите название растения:\n\n*Примеры:*\n• Фикус\n• Монстера\n• Орхидея\n• Кактус",
+            parse_mode="Markdown"
+        )
         return ADD_NAME
     return ConversationHandler.END
 
 
 async def add_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Сохраняем растение только по названию и показываем рекомендации"""
+    """Сохраняем растение только по названию"""
     plant_name = update.message.text.strip()
 
     user = update.effective_user
@@ -66,60 +66,36 @@ async def add_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     plant_id = add_plant(user_id=user_id, name=plant_name)
 
-    # Получаем рекомендации из OpenFarm
-    care_text = await fetch_openfarm_care(plant_name)
+    # Базовая информация по популярным растениям
+    care_text = get_basic_care_info(plant_name)
 
-    text = f"*Карточка растения*\nНазвание: {plant_name}\n\n{care_text}"
+    text = f"🌿 *Растение добавлено!*\n\n*Название:* {plant_name}\n\n{care_text}"
     await update.message.reply_text(text, parse_mode="Markdown")
 
     context.user_data.clear()
     return ConversationHandler.END
 
 
-# Словарь для перевода популярных русских названий в английские
-NAME_MAP = {
-    "фикус": "ficus",
-    "монстера": "monstera",
-    "суккулент": "succulent",
-    "орхидея": "orchid",
-    "алое": "aloe",
-    "кактус": "cactus",
-}
+def get_basic_care_info(plant_name: str) -> str:
+    """Базовая информация по уходу за популярными растениями"""
+    plant_name_lower = plant_name.lower()
 
-async def fetch_openfarm_care(plant_name: str) -> str:
-    """Запрос к OpenFarm API для получения рекомендаций"""
-    try:
-        # если название на русском — подставляем английский аналог
-        query = NAME_MAP.get(plant_name.lower(), plant_name)
+    care_info = {
+        "фикус": "💧 *Полив:* умеренный, когда верхний слой почвы подсохнет\n☀️ *Свет:* яркий рассеянный\n🌡️ *Температура:* 18-25°C\n🌿 *Уход:* регулярное опрыскивание",
+        "монстера": "💧 *Полив:* обильный, но давайте почве просыхать\n☀️ *Свет:* полутень или рассеянный свет\n🌡️ *Температура:* 20-25°C\n🌿 *Уход:* опрыскивание, поддержка для роста",
+        "орхидея": "💧 *Полив:* умеренный, методом погружения\n☀️ *Свет:* яркий рассеянный, без прямого солнца\n🌡️ *Температура:* 18-25°C\n🌿 *Уход:* специальный субстрат для орхидей",
+        "кактус": "💧 *Полив:* редкий, зимой почти не поливать\n☀️ *Свет:* максимально яркий\n🌡️ *Температура:* 20-30°C летом, 10-15°C зимой\n🌿 *Уход:* хорошо дренированная почва",
+        "суккулент": "💧 *Полив:* умеренный, давайте почве полностью просохнуть\n☀️ *Свет:* яркий прямой\n🌡️ *Температура:* 18-25°C\n🌿 *Уход:* песчаная почва, хороший дренаж",
+        "алое": "💧 *Полив:* умеренный, зимой реже\n☀️ *Свет:* яркий рассеянный\n🌡️ *Температура:* 18-25°C\n🌿 *Уход:* не требует частого ухода",
+    }
 
-        response = requests.get(OPENFARM_URL + query, timeout=15)
-        if not response.ok:
-            return f"⚠️ Ошибка OpenFarm API ({response.status_code})"
+    # Поиск совпадения
+    for key, info in care_info.items():
+        if key in plant_name_lower:
+            return info
 
-        # проверяем, что ответ действительно JSON
-        if "application/json" not in response.headers.get("Content-Type", ""):
-            return "ℹ️ OpenFarm вернул неожиданный ответ. Попробуйте ввести название на английском."
-
-        data = response.json()
-        crops = data.get("data", [])
-        if not crops:
-            return "ℹ️ Рекомендации по уходу пока не найдены. Попробуйте ввести название на английском."
-
-        crop = crops[0]
-        attr = crop.get("attributes", {})
-
-        text = ""
-        if attr.get("description"):
-            text += f"📖 {attr['description']}\n\n"
-        if attr.get("sun_requirements"):
-            text += f"☀️ Свет: {attr['sun_requirements']}\n"
-        if attr.get("sowing_method"):
-            text += f"🌱 Посев: {attr['sowing_method']}\n"
-
-        return text or "ℹ️ Рекомендации по уходу пока не найдены."
-    except Exception as e:
-        return f"⚠️ Ошибка при обращении к OpenFarm: {e}"
-
+    # Общая информация для неизвестных растений
+    return "💡 *Общие рекомендации:*\n• Полив: когда верхний слой почвы подсох\n• Свет: яркий рассеянный\n• Температура: 18-25°C\n• Удобрения: весной и летом\n\nДля точной диагностики используйте функцию 🔍 Диагностика"
 
 
 async def send_plant_card(update_or_message, plant_id: int):
@@ -127,25 +103,34 @@ async def send_plant_card(update_or_message, plant_id: int):
     msg = update_or_message.message if hasattr(update_or_message, "message") else update_or_message
     plant = get_plant(plant_id)
     if not plant:
-        await msg.reply_text("Не удалось найти растение.")
+        await msg.reply_text("❌ Не удалось найти растение.")
         return
 
     pid, user_id, name, type_, photo, freq, last_watered, created = plant
-    care_text = await fetch_openfarm_care(name)
+    care_text = get_basic_care_info(name)
 
-    text = f"*Карточка растения*\nНазвание: {name}\nДобавлено: {created.split('T')[0]}\n\n{care_text}"
+    text = f"🌿 *Карточка растения*\n\n*Название:* {name}\n*Добавлено:* {created.split('T')[0]}\n\n{care_text}"
 
     keyboard = [
         [InlineKeyboardButton("🔍 Диагностика по фото", callback_data=f"diag_photo_{pid}")],
-        [InlineKeyboardButton("🛎 Настроить напоминания", callback_data=f"reminders_{pid}")],
-        [InlineKeyboardButton("📜 История ухода", callback_data=f"history_{pid}")],
-        [InlineKeyboardButton("❌ Удалить растение", callback_data=f"delete_{pid}")],
+        [InlineKeyboardButton("💧 Отметить полив", callback_data=f"water_{pid}")],
+        [InlineKeyboardButton("📝 Добавить заметку", callback_data=f"note_{pid}")],
+        [InlineKeyboardButton("🗑️ Удалить растение", callback_data=f"delete_{pid}")],
     ]
 
     if photo:
-        await msg.reply_photo(photo=photo, caption=text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+        await msg.reply_photo(
+            photo=photo,
+            caption=text,
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
     else:
-        await msg.reply_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+        await msg.reply_text(
+            text,
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
 
 
 async def delete_plant_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -155,11 +140,12 @@ async def delete_plant_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data.startswith("delete_"):
         plant_id = int(query.data.split("_")[1])
         delete_plant(plant_id)
-        await query.edit_message_text("✅ Растение удалено.\nОбновите список командой /myplants")
+        await query.edit_message_text("✅ *Растение удалено*\n\nОбновите список командой /myplants",
+                                      parse_mode="Markdown")
 
 
 def build_profile_conversation():
-    """Диалог добавления растения (только название)"""
+    """Диалог добавления растения"""
     return ConversationHandler(
         entry_points=[CallbackQueryHandler(my_plants_cb, pattern="^add_plant$")],
         states={
