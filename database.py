@@ -1,14 +1,18 @@
 import sqlite3
+import os
+import tempfile
 from contextlib import contextmanager
 from datetime import datetime
 
-DATABASE_URL = None
-USE_POSTGRES = False
+# Определяем путь к БД
+DB_PATH = 'plants.db'
 
 def init_db():
+    """Инициализация БД"""
     with get_conn() as conn:
         cur = conn.cursor()
 
+        # Таблицы остаются без изменений
         cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,9 +87,9 @@ def add_plant(user_id: int, name: str, type_: str = None, photo_file_id: str = N
         cur = conn.cursor()
         now = datetime.utcnow().isoformat()
         cur.execute("""
-            INSERT INTO plants (user_id, name, type, photo_file_id, watering_every_days, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (user_id, name, type_, photo_file_id, watering_every_days, now))
+            INSERT INTO plants (user_id, name, type, photo_file_id, watering_every_days, last_watered_at, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (user_id, name, type_, photo_file_id, watering_every_days, now, now))  # ← last_watered_at тоже now
         conn.commit()
         return cur.lastrowid
 
@@ -121,6 +125,7 @@ def set_watering_schedule(plant_id: int, watering_interval_days: int):
     """Установить график полива для растения"""
     with get_conn() as conn:
         cur = conn.cursor()
+        # Устанавливаем интервал и дату последнего полива (сейчас)
         cur.execute("""
             UPDATE plants 
             SET watering_every_days = ?, last_watered_at = ?
@@ -138,7 +143,15 @@ def get_plants_needing_watering():
             JOIN users u ON p.user_id = u.id
             WHERE p.watering_every_days IS NOT NULL
             AND p.last_watered_at IS NOT NULL
-            AND julianday('now') - julianday(p.last_watered_at) > p.watering_every_days
+            AND (
+                -- Для интервалов меньше 1 дня используем минуты
+                (p.watering_every_days < 1 AND 
+                 (julianday('now') - julianday(p.last_watered_at)) * 1440 > p.watering_every_days * 1440)
+                OR
+                -- Для интервалов 1 день и больше используем дни
+                (p.watering_every_days >= 1 AND 
+                 julianday('now') - julianday(p.last_watered_at) > p.watering_every_days)
+            )
         """)
         return cur.fetchall()
 

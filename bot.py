@@ -1,7 +1,7 @@
 import logging
 import os
 from dotenv import load_dotenv
-from telegram import ReplyKeyboardMarkup, Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import ReplyKeyboardMarkup, Update
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -12,27 +12,17 @@ from telegram.ext import (
     ConversationHandler
 )
 
-from database import (
-    init_db,
-    get_plants_needing_watering,
-    mark_watered
-)
-from handlers.profile import (
-    my_plants,
-    build_profile_conversation,
-    delete_plant_cb,
-    setup_reminders_cb,
-    handle_interval_selection,
-    handle_custom_interval,
-    SET_WATERING_INTERVAL
-)
+from database import init_db
+from handlers.profile import my_plants, build_profile_conversation, delete_plant_cb, setup_reminders_cb, \
+    handle_interval_selection
 from handlers.diagnosis import handle_symptoms
 from handlers.recommendations import get_recommendations
 from handlers.diagnose_photo import diagnose_photo
 from handlers.trefle import build_trefle_conversation
-from handlers.start import start, help_command
+from handlers.start import start, help_command, back_to_main
 from handlers.gigachat_gardener import build_gardener_conversation
-# Загружаем .env
+from handlers.reminders import handle_watered_callback, check_reminders_command, send_manual_reminder
+
 load_dotenv()
 
 logging.basicConfig(
@@ -53,199 +43,131 @@ MAIN_KEYBOARD = [
 ]
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    reply_markup = ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
-    await update.message.reply_text(
-        "🌿 *Добро пожаловать в DoctorWood!*\n\nВыберите действие:",
-        parse_mode="Markdown",
-        reply_markup=reply_markup,
-    )
-
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "*Доступные команды:*\n"
-        "/start - главное меню\n"
-        "/myplants - мои растения\n"
-        "/diagnose - диагностика по фото\n"
-        "/recommendations - рекомендации по уходу\n",
-        parse_mode="Markdown",
-    )
-
-
-async def diagnose_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "📷 Пришлите фото растения для диагностики",
-        reply_markup=ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True),
-    )
-
-
-async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
-
-    if text == "🌱 Мои растения":
-        await my_plants(update, context)
-
-    elif text == "🔍 Диагностика":
-        await update.message.reply_text(
-            "Выберите тип диагностики:\n"
-            "• 📷 Пришлите фото для диагностики по фото\n"
-            "• 📝 Опишите симптомы текстом",
-            reply_markup=ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True),
-        )
-
-    elif text == "📚 Рекомендации":
-        await get_recommendations(update, context)
-
-    elif text == "🌍 Поиск растений":
-        await update.message.reply_text(
-            "Введите название растения для поиска в базе Trefle:",
-            reply_markup=ReplyKeyboardMarkup([["⬅️ Назад"]], resize_keyboard=True),
-        )
-        from handlers.trefle import trefle_start
-        await trefle_start(update, context)
-
-    elif text == "👨‍🌾 Чат с агрономом":
-        await update.message.reply_text(
-            "👨‍🌾 *Чат с агрономом*\n\n"
-            "Эта функция находится в разработке 🛠️\n\n"
-            "Скоро вы сможете:\n"
-            "• 💬 Задавать вопросы профессиональным агрономам\n"
-            "• 📸 Получать консультации по вашим растениям\n"
-            "• 🌿 Получать персональные рекомендации\n\n"
-            "А пока используйте автоматическую диагностику растений! 🔍",
-            parse_mode="Markdown",
-            reply_markup=ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
-        )
-
-    elif text == "⬅️ Назад":
-        await start(update, context)
-
-
 async def check_watering_reminders(context: ContextTypes.DEFAULT_TYPE):
-    """Проверка растений, которые нужно полить"""
-    plants_to_water = get_plants_needing_watering()
+    """Проверка напоминаний о поливе"""
+    from database import get_plants_needing_watering
+    plants = get_plants_needing_watering()
 
-    for plant in plants_to_water:
-        plant_id, plant_name, interval, last_watered, chat_id = plant
-        message = (
-            f"💧 *Напоминание о поливе*\n\n"
-            f"Растение *{plant_name}* пора полить!\n"
-            f"Последний полив: {last_watered.split('T')[0]}\n"
-            f"Интервал: каждые {interval} дней\n\n"
-            f"После полива нажмите кнопку ниже 👇"
-        )
+    print(f"🔍 Проверка напоминаний: найдено {len(plants)} растений")
 
-        keyboard = [
-            [InlineKeyboardButton("✅ Полил(а)", callback_data=f"watered_{plant_id}")],
-            [InlineKeyboardButton("🌱 Мои растения", callback_data="show_plants")]
-        ]
+    if not plants:
+        print("ℹ️ Нет растений, требующих полива")
+        return
+
+    for plant in plants:
+        plant_id, name, interval, last_watered, chat_id = plant
+        print(f"💧 Растение нуждается в поливе: {name} (ID: {plant_id}, интервал: {interval} дней)")
 
         try:
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=message,
-                parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
+            await send_manual_reminder(context.bot, chat_id, name, plant_id)
+            print(f"✅ Напоминание отправлено для {name} в чат {chat_id}")
         except Exception as e:
-            logging.error(f"Не удалось отправить напоминание: {e}")
+            print(f"❌ Ошибка отправки напоминания для {name}: {e}")
 
 
-async def handle_watered_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка отметки о поливе"""
-    query = update.callback_query
-    await query.answer()
+async def test_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Тестовая команда для создания растения с интервалом 1 день"""
+    from database import add_plant, set_watering_schedule, upsert_user
+    import datetime
 
-    if query.data.startswith("watered_"):
-        plant_id = int(query.data.split("_")[1])
-        mark_watered(plant_id)
+    # Создаем/получаем пользователя
+    user_id = upsert_user(
+        chat_id=update.effective_chat.id,
+        username=update.effective_user.username,
+        first_name=update.effective_user.first_name,
+        last_name=update.effective_user.last_name
+    )
 
-        await query.edit_message_text(
-            "✅ *Отлично!* Растение полито.\n\n"
-            "Следующее напоминание придёт согласно установленному графику.",
-            parse_mode="Markdown"
-        )
+    # Добавляем тестовое растение
+    plant_id = add_plant(user_id, "Тестовое растение", "тест")
+
+    # Устанавливаем интервал 1 день
+    set_watering_schedule(plant_id, 1)
+
+    # Ставим дату полива 2 дня назад для теста
+    from database import get_conn
+    with get_conn() as conn:
+        cur = conn.cursor()
+        old_date = (datetime.datetime.now() - datetime.timedelta(days=2)).isoformat()
+        cur.execute("UPDATE plants SET last_watered_at = ? WHERE id = ?", (old_date, plant_id))
+        conn.commit()
+
+    await update.message.reply_text(
+        "✅ Тестовое растение создано с интервалом полива 1 день!\n"
+        "Напоминание придет в течение 5 минут."
+    )
 
 
-def main():
-    init_db()
-    app = Application.builder().token(TOKEN).build()
+def setup_handlers(application):
+    """Настройка всех обработчиков"""
 
-    # Настройка JobQueue для напоминаний
-    job_queue = app.job_queue
+    # Базовые команды
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("myplants", my_plants))
+    application.add_handler(CommandHandler("check_reminders", check_reminders_command))
+    application.add_handler(CommandHandler("test_reminder", test_reminder))  # только для теста
+
+    # Главное меню
+    application.add_handler(MessageHandler(filters.Regex("^🌱 Мои растения$"), my_plants))
+    application.add_handler(MessageHandler(filters.Regex("^🔍 Диагностика$"), diagnose_photo))
+    application.add_handler(MessageHandler(filters.Regex("^📚 Рекомендации$"), get_recommendations))
+    # УБИРАЕМ строку с start_gardener_chat - она обрабатывается в build_gardener_conversation()
+
+    # Кнопка Назад
+    application.add_handler(MessageHandler(filters.Regex("^⬅️ Назад$"), back_to_main))
+    application.add_handler(MessageHandler(filters.Regex("^↩️ Назад$"), back_to_main))
+
+    # Диагностика по фото
+    application.add_handler(MessageHandler(filters.PHOTO, diagnose_photo))
+
+    # Диалоги
+    application.add_handler(build_trefle_conversation())
+    application.add_handler(build_gardener_conversation())  # ← здесь обрабатывается "👨‍🌾 Чат с агрономом"
+    application.add_handler(build_profile_conversation())
+
+    # Callback обработчики
+    application.add_handler(CallbackQueryHandler(delete_plant_cb, pattern="^delete_"))
+    application.add_handler(CallbackQueryHandler(setup_reminders_cb, pattern="^reminders_"))
+    application.add_handler(CallbackQueryHandler(handle_watered_callback, pattern="^watered_"))
+    application.add_handler(CallbackQueryHandler(handle_interval_selection, pattern="^interval_"))
+    application.add_handler(CallbackQueryHandler(handle_interval_selection, pattern="^custom_interval$"))
+
+    # Обработка текстовых сообщений
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_symptoms))
+
+
+def create_application():
+    """Создание и настройка приложения"""
+    application = Application.builder().token(TOKEN).build()
+    setup_handlers(application)
+
+    # Настройка автоматических напоминаний
+    job_queue = application.job_queue
     if job_queue:
         job_queue.run_repeating(
             check_watering_reminders,
-            interval=3600,  # Проверка каждый час
+            interval=300,  # 5 минут для теста
             first=10
         )
+        print("🔔 Автоматические напоминания настроены")
 
-    # Обработчики напоминаний
-    app.add_handler(CallbackQueryHandler(handle_watered_callback, pattern="^watered_"))
+    return application
 
-    # ConversationHandler для напоминаний
-    reminder_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(setup_reminders_cb, pattern="^reminders_")],
-        states={
-            SET_WATERING_INTERVAL: [
-                CallbackQueryHandler(handle_interval_selection, pattern="^interval_"),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_interval)
-            ],
-        },
-        fallbacks=[],
-        allow_reentry=True,
-        per_message=False
-    )
-    app.add_handler(reminder_conv)
 
-    # Команды
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("myplants", my_plants))
-    app.add_handler(CommandHandler("recommendations", get_recommendations))
-    app.add_handler(CommandHandler("diagnose", diagnose_command))
+def main():
+    """Локальный запуск"""
+    print("🔄 Инициализация БД...")
+    init_db()
+    print("✅ БД инициализирована")
 
-    # Диалог добавления растения
-    app.add_handler(build_profile_conversation())
+    application = create_application()
 
-    # Trefle поиск
-    app.add_handler(build_trefle_conversation())
+    print("🤖 Бот запущен локально...")
+    print("💧 Напоминания будут приходить каждые 5 минут")
+    print("🔧 Для теста используйте /test_reminder")
 
-    # Диагностика по фото
-    app.add_handler(MessageHandler(filters.PHOTO, diagnose_photo))
-
-    # AI-садовод
-    app.add_handler(build_gardener_conversation())
-
-    # Callback для удаления растения
-    app.add_handler(CallbackQueryHandler(delete_plant_cb, pattern="^delete_"))
-
-    # Обработка кнопок меню
-    app.add_handler(
-        MessageHandler(
-            filters.Regex(
-                "^(🌱 Мои растения|🔍 Диагностика|📚 Рекомендации|🌍 Поиск растений|👨‍🌾 Чат с агрономом|⬅️ Назад)$"
-            ),
-            handle_menu,
-        )
-    )
-
-    # Обработка симптомов
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_symptoms))
-
-    logging.info("✅ Бот запускается...")
-
-    try:
-        app.run_polling(
-            allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True
-        )
-    except Exception as e:
-        logging.error(f"❌ Ошибка запуска: {e}")
-        import time
-        time.sleep(10)
-        app.run_polling(drop_pending_updates=True)
+    application.run_polling()
 
 
 if __name__ == "__main__":

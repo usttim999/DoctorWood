@@ -40,7 +40,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • 🔍 *Диагностика* - пришлите фото или опишите симптомы проблемы
 • 📚 *Рекомендации* - общие советы по уходу
 • 🌍 *Поиск растений* - найдите информацию о любом растении
-• 👨‍🌾 *Чат с агрономом* - консультация специалиста (в разработке)
+• 👨‍🌾 *Чат с агрономом* - консультация специалиста
 
 *Команды:*
 /start - главное меню
@@ -49,3 +49,13 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 /recommendations - советы по уходу
     """
     await update.message.reply_text(help_text, parse_mode='Markdown')
+
+
+async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Возврат в главное меню"""
+    reply_markup = ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
+    await update.message.reply_text(
+        "↩️ *Возврат в главное меню*",
+        parse_mode='Markdown',
+        reply_markup=reply_markup
+    )

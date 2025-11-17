@@ -8,12 +8,15 @@ from telegram.ext import (
     filters,
 )
 
+# Импортируем функцию назад
+from handlers.start import back_to_main
+
 # API ключ берём из .env
 TREFLE_API_KEY = os.getenv("TREFLE_API_KEY")
 TREFLE_URL = "https://trefle.io/api/v1/species/search"
 
 # Состояния диалога
-ASK_NAME = range(1)
+ASK_NAME, AFTER_SEARCH = range(2)
 
 
 async def trefle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -43,12 +46,7 @@ async def trefle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.message.text.strip()
 
     if query == "⬅️ Назад":
-        from handlers.start import MAIN_KEYBOARD
-        await update.message.reply_text(
-            "↩️ Возврат в главное меню",
-            reply_markup=ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
-        )
-        return ConversationHandler.END
+        return await back_to_main(update, context)
 
     # Показываем, что идёт поиск
     searching_msg = await update.message.reply_text("🔍 Ищем информацию о растении...")
@@ -59,7 +57,7 @@ async def trefle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if not response.ok:
             await searching_msg.edit_text(f"❌ Ошибка при поиске (код {response.status_code})")
-            return ConversationHandler.END
+            return ASK_NAME
 
         data = response.json().get("data", [])
         if not data:
@@ -71,7 +69,7 @@ async def trefle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"• Использовать научное название",
                 parse_mode="Markdown"
             )
-            return ConversationHandler.END
+            return ASK_NAME
 
         plant = data[0]
         await searching_msg.delete()  # Удаляем сообщение о поиске
@@ -134,43 +132,51 @@ async def trefle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
             )
 
+        # Переходим в состояние AFTER_SEARCH для обработки кнопок
+        return AFTER_SEARCH
+
     except requests.exceptions.Timeout:
         await searching_msg.edit_text(
             "⏰ *Таймаут запроса*\n\n"
             "Поиск занял слишком много времени. Попробуйте позже.",
             parse_mode="Markdown"
         )
+        return ASK_NAME
     except requests.exceptions.ConnectionError:
         await searching_msg.edit_text(
             "🌐 *Ошибка соединения*\n\n"
             "Проверьте подключение к интернету и попробуйте снова.",
             parse_mode="Markdown"
         )
+        return ASK_NAME
     except Exception as e:
         await searching_msg.edit_text(
             f"❌ *Ошибка поиска*\n\n"
             f"Техническая информация: {str(e)}",
             parse_mode="Markdown"
         )
+        return ASK_NAME
 
-    return ConversationHandler.END
 
-
-async def handle_trefle_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_after_search_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка действий после поиска"""
     text = update.message.text
 
     if text == "🔍 Найти другое растение":
-        return await trefle_start(update, context)
-    elif text == "⬅️ Назад":
-        from handlers.start import MAIN_KEYBOARD
+        # Перезапускаем поиск
         await update.message.reply_text(
-            "↩️ Возврат в главное меню",
-            reply_markup=ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
+            "🔍 *Поиск растений*\n\n"
+            "Введите название растения на русском или английском:",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardMarkup([["⬅️ Назад"]], resize_keyboard=True),
         )
-        return ConversationHandler.END
+        return ASK_NAME
+    elif text == "⬅️ Назад":
+        # Возвращаем в главное меню
+        return await back_to_main(update, context)
 
-    return ConversationHandler.END
+    # Если пришел другой текст, остаемся в том же состоянии
+    return AFTER_SEARCH
 
 
 def build_trefle_conversation():
@@ -180,9 +186,13 @@ def build_trefle_conversation():
         states={
             ASK_NAME: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, trefle_search),
-                MessageHandler(filters.Regex("^(🔍 Найти другое растение|⬅️ Назад)$"), handle_trefle_actions)
+            ],
+            AFTER_SEARCH: [
+                MessageHandler(filters.Regex("^(🔍 Найти другое растение|⬅️ Назад)$"), handle_after_search_actions),
             ],
         },
-        fallbacks=[],
+        fallbacks=[
+            MessageHandler(filters.Regex("^⬅️ Назад$"), back_to_main),
+        ],
         allow_reentry=True,
     )

@@ -217,11 +217,16 @@ async def handle_custom_interval(update: Update, context: ContextTypes.DEFAULT_T
 
 
 def build_profile_conversation():
-    """Диалог добавления растения"""
+    """Диалог добавления растения и настройки напоминаний"""
     return ConversationHandler(
         entry_points=[CallbackQueryHandler(my_plants_cb, pattern="^add_plant$")],
         states={
             ADD_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_name)],
+            SET_WATERING_INTERVAL: [
+                CallbackQueryHandler(handle_interval_selection, pattern="^interval_"),
+                CallbackQueryHandler(handle_interval_selection, pattern="^custom_interval$"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_interval)
+            ],
         },
         fallbacks=[],
         allow_reentry=True,
