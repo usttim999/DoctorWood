@@ -31,7 +31,10 @@ DISEASE_TRANSLATIONS = {
     'brown spots': 'коричневые пятна',
     'whiteflies': 'белокрылка',
     'thrips': 'трипсы',
-    'dead plant': 'умершее растение'
+    'dead plant': 'умершее растение',
+    'water excess or uneven watering': 'избыток воды или неравновременный полив',
+    'water deficiency':'дефицит воды',
+    'lack of light':'недостаток света'
 }
 
 # Детальные описания болезней
