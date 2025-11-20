@@ -30,7 +30,8 @@ DISEASE_TRANSLATIONS = {
     'yellowing': 'пожелтение листьев',
     'brown spots': 'коричневые пятна',
     'whiteflies': 'белокрылка',
-    'thrips': 'трипсы'
+    'thrips': 'трипсы',
+    'dead plant': 'умершее растение'
 }
 
 # Детальные описания болезней

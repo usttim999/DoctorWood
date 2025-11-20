@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from datetime import datetime
 
 # Определяем путь к БД
-DB_PATH = 'plants.db'
+DB_PATH = os.getenv('DB_PATH', '/data/plants.db')
 
 def init_db():
     """Инициализация БД"""
