@@ -34,7 +34,8 @@ DISEASE_TRANSLATIONS = {
     'dead plant': 'умершее растение',
     'water excess or uneven watering': 'избыток воды или неравновременный полив',
     'water deficiency':'дефицит воды',
-    'lack of light':'недостаток света'
+    'lack of light':'недостаток света',
+    'finished flowering period':'заканчивается период цветения'
 }
 
 # Детальные описания болезней
@@ -67,7 +68,8 @@ PLANT_TRANSLATIONS = {
     'sansevieria': 'Сансевиерия (Щучий хвост)',
     'epipremnum aureum': 'Эпипремнум (Сциндапсус)',
     'crassula ovata': 'Крассула (Денежное дерево)',
-    'aloe vera': 'Алоэ вера'
+    'aloe vera': 'Алоэ вера',
+    'Dendrophylax lindenii':'Призрачная орхидея'
 }
 WATERING_GUIDE = {
     'фикус': 'Умеренный полив, когда верхний слой почвы подсохнет',

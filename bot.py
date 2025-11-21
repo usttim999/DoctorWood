@@ -16,7 +16,7 @@ from database import init_db
 from handlers.profile import my_plants, build_profile_conversation, delete_plant_cb, setup_reminders_cb, \
     handle_interval_selection
 from handlers.diagnosis import handle_symptoms
-from handlers.recommendations import get_recommendations
+from handlers.recommendations import build_recommendations_conversation
 from handlers.diagnose_photo import diagnose_photo
 from handlers.trefle import build_trefle_conversation
 from handlers.start import start, help_command, back_to_main
@@ -111,7 +111,9 @@ def setup_handlers(application):
     # Главное меню
     application.add_handler(MessageHandler(filters.Regex("^🌱 Мои растения$"), my_plants))
     application.add_handler(MessageHandler(filters.Regex("^🔍 Диагностика$"), diagnose_photo))
-    application.add_handler(MessageHandler(filters.Regex("^📚 Рекомендации$"), get_recommendations))
+
+    from handlers.recommendations import build_recommendations_conversation
+    application.add_handler(build_recommendations_conversation())
     # УБИРАЕМ строку с start_gardener_chat - она обрабатывается в build_gardener_conversation()
 
     # Кнопка Назад
