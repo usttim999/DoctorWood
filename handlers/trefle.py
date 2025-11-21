@@ -187,7 +187,7 @@ def get_available_care_data(plant_data):
         soil_section.append(f"📊 Питательность: {nutrient_map.get(soil_nutrients, f'Уровень {soil_nutrients}/10')}")
 
     if soil_section:
-        care_info.append("🏺 *Почва:*\n" + "\n".join(f"• {item}" for item in soil_section))
+        care_info.append("🌱 *Почва:*\n" + "\n".join(f"• {item}" for item in soil_section))
 
     # 🌿 ХАРАКТЕРИСТИКИ РАСТЕНИЯ
     characteristics_section = []
@@ -238,7 +238,7 @@ def get_available_care_data(plant_data):
     # Цвет цветов
     flower_color = flower.get('color', [])
     if flower_color:
-        reproduction_section.append(f"🎨 Цвет цветов: {', '.join(flower_color)}")
+        reproduction_section.append(f"🎨 Цвет: {', '.join(flower_color)}")
 
     if reproduction_section:
         care_info.append("🌸 *Размножение:*\n" + "\n".join(f"• {item}" for item in reproduction_section))
@@ -402,7 +402,7 @@ async def trefle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             text += "ℹ️ *Информация об уходе:*\n"
             text += "Детальная информация об уходе отсутствует в базе данных.\n"
-            text += "Рекомендуется использовать общие рекомендации для данного семейства растений.\n\n"
+            text += "Рекомендуем обратиться в чат с агрономом - он обязательно поможет!\n\n"
 
         # Клавиатура для дополнительных действий
         keyboard = [["🔍 Найти другое растение", "⬅️ Назад"]]
