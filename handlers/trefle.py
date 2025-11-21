@@ -7,16 +7,157 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+from deep_translator import GoogleTranslator
 
 # Импортируем функцию назад
 from handlers.start import back_to_main
 
 # API ключ берём из .env
 TREFLE_API_KEY = os.getenv("TREFLE_API_KEY")
-TREFLE_URL = "https://trefle.io/api/v1/species/search"
+TREFLE_BASE_URL = "https://trefle.io/api/v1"
 
 # Состояния диалога
 ASK_NAME, AFTER_SEARCH = range(2)
+
+# Словарь для перевода месяцев
+MONTHS_TRANSLATION = {
+    'january': 'Январь', 'february': 'Февраль', 'march': 'Март',
+    'april': 'Апрель', 'may': 'Май', 'june': 'Июнь',
+    'july': 'Июль', 'august': 'Август', 'september': 'Сентябрь',
+    'october': 'Октябрь', 'november': 'Ноябрь', 'december': 'Декабрь'
+}
+
+
+def detect_language(plant_name):
+    """Определяем язык введенного названия"""
+    cyrillic_chars = 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя'
+    if any(char in cyrillic_chars for char in plant_name.lower()):
+        return 'russian'
+    else:
+        return 'latin'
+
+
+def translate_to_latin(russian_name):
+    """Перевод русского названия на латынь"""
+    try:
+        latin_name = GoogleTranslator(source='ru', target='la').translate(russian_name)
+        return latin_name
+    except Exception as e:
+        print(f"Translation error: {e}")
+        return None
+
+
+def get_light_description(light_level):
+    """Описание уровня освещения"""
+    light_map = {
+        0: "❌ Без света (<= 10 lux)",
+        1: "💡 Очень слабое",
+        2: "💡 Слабое",
+        3: "💡 Слабое",
+        4: "🔆 Умеренное",
+        5: "🔆 Умеренное",
+        6: "☀️ Яркое",
+        7: "☀️ Яркое",
+        8: "☀️ Очень яркое",
+        9: "🔥 Интенсивное",
+        10: "🔥 Очень интенсивное (>= 100,000 lux)"
+    }
+    return light_map.get(light_level, "Не указано")
+
+
+def get_toxicity_description(toxicity):
+    """Описание токсичности"""
+    toxicity_map = {
+        'none': "✅ Безопасно",
+        'low': "⚠️ Низкая токсичность",
+        'medium': "⚠️ Средняя токсичность",
+        'high': "☠️ Высокая токсичность"
+    }
+    return toxicity_map.get(toxicity, "Не указано")
+
+
+def get_care_difficulty(plant_data):
+    """Определяем сложность ухода на основе данных"""
+    score = 0
+    growth = plant_data.get('growth', {})
+
+    # Анализируем требования
+    if growth.get('ph_minimum') and growth.get('ph_maximum'):
+        score += 1
+
+    if growth.get('minimum_temperature') and growth.get('maximum_temperature'):
+        score += 1
+
+    if growth.get('soil_humidity') is not None:
+        score += 1
+
+    if score == 0:
+        return "🟢 Легкий уход"
+    elif score == 1:
+        return "🟡 Средняя сложность"
+    else:
+        return "🔴 Сложный уход"
+
+
+def get_seasonal_advice(plant_data):
+    """Сезонные рекомендации на основе данных"""
+    growth = plant_data.get('growth', {})
+    bloom_months = growth.get('bloom_months', [])
+    growth_months = growth.get('growth_months', [])
+    fruit_months = growth.get('fruit_months', [])
+
+    advice = "*🌱 Сезонные рекомендации:*\n"
+
+    if bloom_months:
+        translated_months = [MONTHS_TRANSLATION.get(month.lower(), month) for month in bloom_months]
+        advice += f"• Цветение: {', '.join(translated_months)}\n"
+
+    if growth_months:
+        translated_months = [MONTHS_TRANSLATION.get(month.lower(), month) for month in growth_months]
+        advice += f"• Активный рост: {', '.join(translated_months)}\n"
+
+    if fruit_months:
+        translated_months = [MONTHS_TRANSLATION.get(month.lower(), month) for month in fruit_months]
+        advice += f"• Плодоношение: {', '.join(translated_months)}\n"
+
+    return advice
+
+
+def get_care_recommendations(plant_data):
+    """Рекомендации по уходу на основе данных Trefle"""
+    growth = plant_data.get('growth', {})
+    specs = plant_data.get('specifications', {})
+
+    recommendations = "*💡 Рекомендации по уходу:*\n"
+
+    # Полив на основе влажности почвы
+    soil_humidity = growth.get('soil_humidity')
+    if soil_humidity is not None:
+        if soil_humidity >= 7:
+            recommendations += "• 💧 Обильный полив (почва всегда влажная)\n"
+        elif soil_humidity >= 4:
+            recommendations += "• 💧 Умеренный полив (давайте почве подсыхать)\n"
+        else:
+            recommendations += "• 💧 Редкий полив (устойчиво к засухе)\n"
+
+    # Температура
+    min_temp = growth.get('minimum_temperature', {}).get('deg_c')
+    max_temp = growth.get('maximum_temperature', {}).get('deg_c')
+    if min_temp and max_temp:
+        recommendations += f"• 🌡️ Температура: {min_temp}°C - {max_temp}°C\n"
+
+    # Освещение
+    light_level = growth.get('light')
+    if light_level is not None:
+        recommendations += f"• ☀️ Освещение: {get_light_description(light_level)}\n"
+
+    # pH почвы
+    ph_min = growth.get('ph_minimum')
+    ph_max = growth.get('ph_maximum')
+    if ph_min and ph_max:
+        recommendations += f"• 🧪 pH почвы: {ph_min} - {ph_max}\n"
+
+    return recommendations
 
 
 async def trefle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -28,13 +169,13 @@ async def trefle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
     await update.message.reply_text(
-        "🔍 *Поиск растений*\n\n"
-        "Введите название растения на русском или английском:\n\n"
+        "🔍 *Умный поиск растений*\n\n"
+        "Введите название растения на русском или латыни:\n\n"
         "*Примеры:*\n"
-        "• Роза\n"
-        "• Ficus\n"
-        "• Орхидея\n"
-        "• Sunflower",
+        "• Роза (автоматически переведётся на латынь)\n"
+        "• Rosa (поиск на латыни)\n"
+        "• Ficus benjamina\n"
+        "• Орхидея",
         parse_mode="Markdown",
         reply_markup=ReplyKeyboardMarkup([["⬅️ Назад"]], resize_keyboard=True),
     )
@@ -42,7 +183,7 @@ async def trefle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def trefle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Поиск растения в Trefle API"""
+    """Умный поиск растения в Trefle API с авто-переводом"""
     query = update.message.text.strip()
 
     if query == "⬅️ Назад":
@@ -52,8 +193,27 @@ async def trefle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     searching_msg = await update.message.reply_text("🔍 Ищем информацию о растении...")
 
     try:
-        url = f"{TREFLE_URL}?q={query}&token={TREFLE_API_KEY}"
-        response = requests.get(url, timeout=15)
+        # Определяем язык и переводим при необходимости
+        language = detect_language(query)
+
+        if language == 'russian':
+            latin_query = translate_to_latin(query)
+            search_query = latin_query if latin_query else query
+            context.user_data['original_query'] = query
+            context.user_data['search_query'] = search_query
+        else:
+            search_query = query
+            context.user_data['original_query'] = query
+            context.user_data['search_query'] = search_query
+
+        # Поиск в Trefle
+        url = f"{TREFLE_BASE_URL}/plants/search"
+        params = {
+            'q': search_query,
+            'token': TREFLE_API_KEY
+        }
+
+        response = requests.get(url, params=params, timeout=15)
 
         if not response.ok:
             await searching_msg.edit_text(f"❌ Ошибка при поиске (код {response.status_code})")
@@ -63,33 +223,49 @@ async def trefle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not data:
             await searching_msg.edit_text(
                 f"🌱 *Растение не найдено*\n\n"
+                f"*Ваш запрос:* {query}\n"
+                f"*Поисковый запрос:* {search_query}\n\n"
                 f"Попробуйте:\n"
-                f"• Ввести название на английском\n"
+                f"• Ввести научное название на латыни\n"
                 f"• Проверить правильность написания\n"
-                f"• Использовать научное название",
+                f"• Использовать английское название",
                 parse_mode="Markdown"
             )
             return ASK_NAME
 
         plant = data[0]
-        await searching_msg.delete()  # Удаляем сообщение о поиске
+        await searching_msg.delete()
 
-        # Формируем красивый ответ
+        # Получаем детальную информацию о растении
+        plant_id = plant.get('id')
+        if plant_id:
+            detail_url = f"{TREFLE_BASE_URL}/species/{plant_id}"
+            detail_params = {'token': TREFLE_API_KEY}
+            detail_response = requests.get(detail_url, params=detail_params, timeout=10)
+            if detail_response.ok:
+                plant_detail = detail_response.json().get('data', {})
+                plant.update(plant_detail)
+
+        # Формируем улучшенный ответ
         common_name = plant.get('common_name')
         scientific_name = plant.get('scientific_name')
-        family = plant.get('family_common_name')
+        family = plant.get('family_common_name') or plant.get('family')
         genus = plant.get('genus')
         image_url = plant.get('image_url')
 
-        text = "🌿 *Информация о растении*\n\n"
+        text = "🌿 *Детальная информация о растении*\n\n"
 
-        if common_name:
-            text += f"*Название:* {common_name}\n"
+        # Информация о запросе
+        if language == 'russian':
+            text += f"*Ваш запрос:* {query}\n"
+            text += f"*Перевод на латынь:* {search_query}\n"
         else:
-            text += f"*Название:* {query.title()}\n"
+            text += f"*Ваш запрос:* {query}\n"
 
-        if scientific_name:
-            text += f"*Научное название:* {scientific_name}\n"
+        text += f"*Научное название:* {scientific_name}\n"
+
+        if common_name and common_name != 'None':
+            text += f"*Общепринятое название:* {common_name}\n"
 
         if family:
             text += f"*Семейство:* {family}\n"
@@ -97,34 +273,49 @@ async def trefle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if genus:
             text += f"*Род:* {genus}\n"
 
-        # Добавляем разделитель
-        text += "\n" + "─" * 30 + "\n\n"
+        # Сложность ухода
+        text += f"*Сложность ухода:* {get_care_difficulty(plant)}\n\n"
 
         # Основная информация
         if plant.get('observations'):
-            text += f"📊 *Наблюдения:* {plant['observations']}\n"
+            text += f"📊 *Описание:* {plant['observations'][:200]}...\n\n"
 
-        if plant.get('vegetable'):
-            text += "🥬 *Тип:* Овощное растение\n"
-        else:
-            text += "🌺 *Тип:* Декоративное растение\n"
+        # Токсичность
+        toxicity = plant.get('specifications', {}).get('toxicity')
+        if toxicity:
+            text += f"*Токсичность:* {get_toxicity_description(toxicity)}\n"
 
+        # Съедобность
         if plant.get('edible'):
             text += "🍽️ *Съедобность:* Съедобное\n"
         else:
             text += "⚠️ *Съедобность:* Не съедобное\n"
 
+        # Добавляем рекомендации по уходу
+        text += "\n" + get_care_recommendations(plant)
+
+        # Добавляем сезонные рекомендации
+        seasonal_advice = get_seasonal_advice(plant)
+        if "Сезонные рекомендации" in seasonal_advice:
+            text += "\n" + seasonal_advice
+
         # Клавиатура для дополнительных действий
         keyboard = [["🔍 Найти другое растение", "⬅️ Назад"]]
 
         if image_url:
-            # Отправляем фото с описанием
-            await update.message.reply_photo(
-                photo=image_url,
-                caption=text,
-                parse_mode="Markdown",
-                reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-            )
+            try:
+                await update.message.reply_photo(
+                    photo=image_url,
+                    caption=text,
+                    parse_mode="Markdown",
+                    reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+                )
+            except:
+                await update.message.reply_text(
+                    text + f"\n\n*Изображение:* {image_url}",
+                    parse_mode="Markdown",
+                    reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+                )
         else:
             await update.message.reply_text(
                 text,
@@ -132,7 +323,6 @@ async def trefle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
             )
 
-        # Переходим в состояние AFTER_SEARCH для обработки кнопок
         return AFTER_SEARCH
 
     except requests.exceptions.Timeout:
@@ -163,19 +353,16 @@ async def handle_after_search_actions(update: Update, context: ContextTypes.DEFA
     text = update.message.text
 
     if text == "🔍 Найти другое растение":
-        # Перезапускаем поиск
         await update.message.reply_text(
-            "🔍 *Поиск растений*\n\n"
-            "Введите название растения на русском или английском:",
+            "🔍 *Умный поиск растений*\n\n"
+            "Введите название растения на русском или латыни:",
             parse_mode="Markdown",
             reply_markup=ReplyKeyboardMarkup([["⬅️ Назад"]], resize_keyboard=True),
         )
         return ASK_NAME
     elif text == "⬅️ Назад":
-        # Возвращаем в главное меню
         return await back_to_main(update, context)
 
-    # Если пришел другой текст, остаемся в том же состоянии
     return AFTER_SEARCH
 
 
