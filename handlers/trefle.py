@@ -53,6 +53,9 @@ def translate_to_latin(russian_name):
 
 def get_light_description(light_level):
     """Описание уровня освещения"""
+    if light_level is None:
+        return None
+
     light_map = {
         0: "❌ Без света (<= 10 lux)",
         1: "💡 Очень слабое",
@@ -66,18 +69,21 @@ def get_light_description(light_level):
         9: "🔥 Интенсивное",
         10: "🔥 Очень интенсивное (>= 100,000 lux)"
     }
-    return light_map.get(light_level, "Не указано")
+    return light_map.get(light_level, f"Уровень {light_level}/10")
 
 
 def get_toxicity_description(toxicity):
     """Описание токсичности"""
+    if not toxicity:
+        return None
+
     toxicity_map = {
         'none': "✅ Безопасно",
         'low': "⚠️ Низкая токсичность",
         'medium': "⚠️ Средняя токсичность",
         'high': "☠️ Высокая токсичность"
     }
-    return toxicity_map.get(toxicity, "Не указано")
+    return toxicity_map.get(toxicity, toxicity)
 
 
 def get_care_difficulty(plant_data):
@@ -103,65 +109,159 @@ def get_care_difficulty(plant_data):
         return "🔴 Сложный уход"
 
 
-def get_seasonal_advice(plant_data):
-    """Сезонные рекомендации на основе данных"""
-    growth = plant_data.get('growth', {})
-    bloom_months = growth.get('bloom_months', [])
-    growth_months = growth.get('growth_months', [])
-    fruit_months = growth.get('fruit_months', [])
-
-    advice = "*🌱 Сезонные рекомендации:*\n"
-
-    if bloom_months:
-        translated_months = [MONTHS_TRANSLATION.get(month.lower(), month) for month in bloom_months]
-        advice += f"• Цветение: {', '.join(translated_months)}\n"
-
-    if growth_months:
-        translated_months = [MONTHS_TRANSLATION.get(month.lower(), month) for month in growth_months]
-        advice += f"• Активный рост: {', '.join(translated_months)}\n"
-
-    if fruit_months:
-        translated_months = [MONTHS_TRANSLATION.get(month.lower(), month) for month in fruit_months]
-        advice += f"• Плодоношение: {', '.join(translated_months)}\n"
-
-    return advice
-
-
-def get_care_recommendations(plant_data):
-    """Рекомендации по уходу на основе данных Trefle"""
+def get_available_care_data(plant_data):
+    """Собираем ВСЮ доступную информацию о растении"""
     growth = plant_data.get('growth', {})
     specs = plant_data.get('specifications', {})
+    foliage = plant_data.get('foliage', {})
+    flower = plant_data.get('flower', {})
+    fruit = plant_data.get('fruit_or_seed', {})
 
-    recommendations = "*💡 Рекомендации по уходу:*\n"
+    care_info = []
 
-    # Полив на основе влажности почвы
+    # 💧 ВОДНЫЙ РЕЖИМ
+    water_section = []
     soil_humidity = growth.get('soil_humidity')
     if soil_humidity is not None:
         if soil_humidity >= 7:
-            recommendations += "• 💧 Обильный полив (почва всегда влажная)\n"
+            water_section.append("💧 Обильный полив")
         elif soil_humidity >= 4:
-            recommendations += "• 💧 Умеренный полив (давайте почве подсыхать)\n"
+            water_section.append("💧 Умеренный полив")
         else:
-            recommendations += "• 💧 Редкий полив (устойчиво к засухе)\n"
+            water_section.append("💧 Редкий полив")
+
+    min_precip = growth.get('minimum_precipitation', {}).get('mm')
+    max_precip = growth.get('maximum_precipitation', {}).get('mm')
+    if min_precip and max_precip:
+        water_section.append(f"🌧️ Осадки: {min_precip}-{max_precip} мм/год")
+
+    if water_section:
+        care_info.append("💧 *Водный режим:*\n" + "\n".join(f"• {item}" for item in water_section))
+
+    # ☀️ ОСВЕЩЕНИЕ И ТЕМПЕРАТУРА
+    light_temp_section = []
+
+    # Освещение
+    light_level = growth.get('light')
+    if light_level is not None:
+        light_desc = get_light_description(light_level)
+        if light_desc:
+            light_temp_section.append(f"☀️ Освещение: {light_desc}")
 
     # Температура
     min_temp = growth.get('minimum_temperature', {}).get('deg_c')
     max_temp = growth.get('maximum_temperature', {}).get('deg_c')
     if min_temp and max_temp:
-        recommendations += f"• 🌡️ Температура: {min_temp}°C - {max_temp}°C\n"
+        light_temp_section.append(f"🌡️ Температура: {min_temp}°C - {max_temp}°C")
+    elif min_temp:
+        light_temp_section.append(f"🌡️ Мин. температура: {min_temp}°C")
+    elif max_temp:
+        light_temp_section.append(f"🌡️ Макс. температура: {max_temp}°C")
 
-    # Освещение
-    light_level = growth.get('light')
-    if light_level is not None:
-        recommendations += f"• ☀️ Освещение: {get_light_description(light_level)}\n"
+    if light_temp_section:
+        care_info.append("🌡️ *Условия содержания:*\n" + "\n".join(f"• {item}" for item in light_temp_section))
 
-    # pH почвы
+    # 🧪 ПОЧВА
+    soil_section = []
+
+    # pH
     ph_min = growth.get('ph_minimum')
     ph_max = growth.get('ph_maximum')
     if ph_min and ph_max:
-        recommendations += f"• 🧪 pH почвы: {ph_min} - {ph_max}\n"
+        soil_section.append(f"🧪 pH почвы: {ph_min} - {ph_max}")
+    elif ph_min:
+        soil_section.append(f"🧪 Мин. pH: {ph_min}")
+    elif ph_max:
+        soil_section.append(f"🧪 Макс. pH: {ph_max}")
 
-    return recommendations
+    # Текстура почвы
+    soil_texture = growth.get('soil_texture')
+    if soil_texture is not None:
+        texture_map = {0: "Глинистая", 5: "Суглинистая", 10: "Скалистая"}
+        soil_section.append(f"🏺 Текстура: {texture_map.get(soil_texture, f'Уровень {soil_texture}/10')}")
+
+    # Питательность почвы
+    soil_nutrients = growth.get('soil_nutriments')
+    if soil_nutrients is not None:
+        nutrient_map = {0: "Бедная", 5: "Средняя", 10: "Очень питательная"}
+        soil_section.append(f"📊 Питательность: {nutrient_map.get(soil_nutrients, f'Уровень {soil_nutrients}/10')}")
+
+    if soil_section:
+        care_info.append("🏺 *Почва:*\n" + "\n".join(f"• {item}" for item in soil_section))
+
+    # 🌿 ХАРАКТЕРИСТИКИ РАСТЕНИЯ
+    characteristics_section = []
+
+    # Высота
+    avg_height = specs.get('average_height', {}).get('cm')
+    max_height = specs.get('maximum_height', {}).get('cm')
+    if avg_height and max_height:
+        characteristics_section.append(f"📏 Высота: {avg_height}-{max_height} см")
+    elif avg_height:
+        characteristics_section.append(f"📏 Средняя высота: {avg_height} см")
+    elif max_height:
+        characteristics_section.append(f"📏 Макс. высота: {max_height} см")
+
+    # Форма роста
+    growth_form = specs.get('growth_form')
+    if growth_form:
+        characteristics_section.append(f"🌿 Форма: {growth_form}")
+
+    growth_habit = specs.get('growth_habit')
+    if growth_habit:
+        characteristics_section.append(f"🎋 Габитус: {growth_habit}")
+
+    # Текстура листьев
+    foliage_texture = foliage.get('texture')
+    if foliage_texture:
+        texture_map = {'fine': "Мелкая", 'medium': "Средняя", 'coarse': "Крупная"}
+        characteristics_section.append(f"🍃 Текстура листьев: {texture_map.get(foliage_texture, foliage_texture)}")
+
+    if characteristics_section:
+        care_info.append("🌿 *Характеристики:*\n" + "\n".join(f"• {item}" for item in characteristics_section))
+
+    # 🌸 ЦВЕТЕНИЕ И ПЛОДОНОШЕНИЕ
+    reproduction_section = []
+
+    # Цветение
+    bloom_months = growth.get('bloom_months', [])
+    if bloom_months:
+        translated_months = [MONTHS_TRANSLATION.get(month.lower(), month) for month in bloom_months]
+        reproduction_section.append(f"🌸 Цветение: {', '.join(translated_months)}")
+
+    # Плодоношение
+    fruit_months = growth.get('fruit_months', [])
+    if fruit_months:
+        translated_months = [MONTHS_TRANSLATION.get(month.lower(), month) for month in fruit_months]
+        reproduction_section.append(f"🍓 Плодоношение: {', '.join(translated_months)}")
+
+    # Цвет цветов
+    flower_color = flower.get('color', [])
+    if flower_color:
+        reproduction_section.append(f"🎨 Цвет цветов: {', '.join(flower_color)}")
+
+    if reproduction_section:
+        care_info.append("🌸 *Размножение:*\n" + "\n".join(f"• {item}" for item in reproduction_section))
+
+    # ⚠️ БЕЗОПАСНОСТЬ
+    safety_section = []
+
+    # Токсичность
+    toxicity = specs.get('toxicity')
+    if toxicity:
+        toxicity_desc = get_toxicity_description(toxicity)
+        if toxicity_desc:
+            safety_section.append(f"⚠️ Токсичность: {toxicity_desc}")
+
+    # Съедобность
+    edible = plant_data.get('edible')
+    if edible is not None:
+        safety_section.append("🍽️ Съедобность: " + ("✅ Съедобное" if edible else "❌ Не съедобное"))
+
+    if safety_section:
+        care_info.append("⚠️ *Безопасность:*\n" + "\n".join(f"• {item}" for item in safety_section))
+
+    return care_info
 
 
 async def trefle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -243,34 +343,6 @@ async def trefle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         plant = data[0]
         await searching_msg.delete()
 
-        # 🔍 ОТЛАДОЧНАЯ ИНФОРМАЦИЯ - выведем что пришло от Trefle
-        logger.info("=== ДАННЫЕ ОТ TREFLE ===")
-        logger.info(f"Common name: {plant.get('common_name')}")
-        logger.info(f"Scientific name: {plant.get('scientific_name')}")
-        logger.info(f"Family: {plant.get('family')}")
-        logger.info(f"Observations: {plant.get('observations', '')[:100]}...")
-
-        growth_data = plant.get('growth', {})
-        logger.info(f"Growth data exists: {bool(growth_data)}")
-        if growth_data:
-            logger.info(f"Light: {growth_data.get('light')}")
-            logger.info(f"PH min/max: {growth_data.get('ph_minimum')}-{growth_data.get('ph_maximum')}")
-            logger.info(f"Bloom months: {growth_data.get('bloom_months')}")
-            logger.info(f"Soil humidity: {growth_data.get('soil_humidity')}")
-            logger.info(f"Growth months: {growth_data.get('growth_months')}")
-            logger.info(f"Fruit months: {growth_data.get('fruit_months')}")
-            logger.info(f"Min temp: {growth_data.get('minimum_temperature')}")
-            logger.info(f"Max temp: {growth_data.get('maximum_temperature')}")
-
-        specifications = plant.get('specifications', {})
-        logger.info(f"Specifications exists: {bool(specifications)}")
-        if specifications:
-            logger.info(f"Toxicity: {specifications.get('toxicity')}")
-            logger.info(f"Average height: {specifications.get('average_height')}")
-            logger.info(f"Growth form: {specifications.get('growth_form')}")
-            logger.info(f"Growth habit: {specifications.get('growth_habit')}")
-        logger.info("========================")
-
         # Получаем детальную информацию о растении
         plant_id = plant.get('id')
         if plant_id:
@@ -281,15 +353,6 @@ async def trefle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 plant_detail = detail_response.json().get('data', {})
                 logger.info(f"🔍 ОТЛАДКА: Детальная информация получена: {bool(plant_detail)}")
                 plant.update(plant_detail)
-
-                # Проверяем детальные данные
-                growth_detail = plant.get('growth', {})
-                if growth_detail:
-                    logger.info(f"🔍 ОТЛАДКА: Детальный light: {growth_detail.get('light')}")
-                    logger.info(f"🔍 ОТЛАДКА: Детальный bloom months: {growth_detail.get('bloom_months')}")
-                    logger.info(f"🔍 ОТЛАДКА: Детальный soil humidity: {growth_detail.get('soil_humidity')}")
-            else:
-                logger.error(f"❌ ОТЛАДКА: Ошибка получения детальной информации: {detail_response.status_code}")
 
         # Формируем улучшенный ответ
         common_name = plant.get('common_name')
@@ -303,7 +366,8 @@ async def trefle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Информация о запросе
         if language == 'russian':
             text += f"*Ваш запрос:* {query}\n"
-            text += f"*Перевод на латынь:* {search_query}\n"
+            if search_query != query:
+                text += f"*Перевод на латынь:* {search_query}\n"
         else:
             text += f"*Ваш запрос:* {query}\n"
 
@@ -323,53 +387,79 @@ async def trefle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Основная информация
         if plant.get('observations'):
-            text += f"📊 *Описание:* {plant['observations'][:200]}...\n\n"
+            observations = plant['observations']
+            # Обрезаем слишком длинное описание
+            if len(observations) > 300:
+                observations = observations[:300] + "..."
+            text += f"📊 *Описание:* {observations}\n\n"
 
-        # Токсичность
-        toxicity = plant.get('specifications', {}).get('toxicity')
-        if toxicity:
-            text += f"*Токсичность:* {get_toxicity_description(toxicity)}\n"
+        # Получаем ВСЮ доступную информацию о уходе
+        care_info = get_available_care_data(plant)
 
-        # Съедобность
-        if plant.get('edible'):
-            text += "🍽️ *Съедобность:* Съедобное\n"
+        if care_info:
+            text += "💡 *Рекомендации по уходу*\n\n"
+            text += "\n\n".join(care_info)
         else:
-            text += "⚠️ *Съедобность:* Не съедобное\n"
-
-        # Добавляем рекомендации по уходу
-        care_recs = get_care_recommendations(plant)
-        logger.info(f"🔍 ОТЛАДКА: Рекомендации по уходу: {care_recs}")
-        text += "\n" + care_recs
-
-        # Добавляем сезонные рекомендации
-        seasonal_advice = get_seasonal_advice(plant)
-        logger.info(f"🔍 ОТЛАДКА: Сезонные рекомендации: {seasonal_advice}")
-        if "Сезонные рекомендации" in seasonal_advice:
-            text += "\n" + seasonal_advice
+            text += "ℹ️ *Информация об уходе:*\n"
+            text += "Детальная информация об уходе отсутствует в базе данных.\n"
+            text += "Рекомендуется использовать общие рекомендации для данного семейства растений.\n\n"
 
         # Клавиатура для дополнительных действий
         keyboard = [["🔍 Найти другое растение", "⬅️ Назад"]]
 
         if image_url:
             try:
-                await update.message.reply_photo(
-                    photo=image_url,
-                    caption=text,
-                    parse_mode="Markdown",
-                    reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-                )
-            except:
+                # Если текст слишком длинный, разбиваем на части
+                if len(text) > 1000:
+                    # Отправляем фото с кратким описанием
+                    short_text = text[:800] + "\n\n... (продолжение в следующем сообщении)"
+                    await update.message.reply_photo(
+                        photo=image_url,
+                        caption=short_text,
+                        parse_mode="Markdown",
+                        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+                    )
+                    # Отправляем оставшийся текст
+                    if len(text) > 800:
+                        remaining_text = text[800:]
+                        await update.message.reply_text(
+                            remaining_text,
+                            parse_mode="Markdown"
+                        )
+                else:
+                    await update.message.reply_photo(
+                        photo=image_url,
+                        caption=text,
+                        parse_mode="Markdown",
+                        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+                    )
+            except Exception as e:
+                logger.error(f"Error sending photo: {e}")
                 await update.message.reply_text(
                     text + f"\n\n*Изображение:* {image_url}",
                     parse_mode="Markdown",
                     reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
                 )
         else:
-            await update.message.reply_text(
-                text,
-                parse_mode="Markdown",
-                reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-            )
+            # Если текст слишком длинный, разбиваем на части
+            if len(text) > 4000:
+                parts = [text[i:i + 4000] for i in range(0, len(text), 4000)]
+                for i, part in enumerate(parts):
+                    if i == len(parts) - 1:
+                        # Последняя часть с клавиатурой
+                        await update.message.reply_text(
+                            part,
+                            parse_mode="Markdown",
+                            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+                        )
+                    else:
+                        await update.message.reply_text(part, parse_mode="Markdown")
+            else:
+                await update.message.reply_text(
+                    text,
+                    parse_mode="Markdown",
+                    reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+                )
 
         return AFTER_SEARCH
 
