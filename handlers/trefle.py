@@ -199,12 +199,12 @@ async def trefle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if language == 'russian':
             latin_query = translate_to_latin(query)
             search_query = latin_query if latin_query else query
-            context.user_data['original_query'] = query
-            context.user_data['search_query'] = search_query
+            print(f"🔤 ОТЛАДКА: Перевод '{query}' -> '{latin_query}'")
         else:
             search_query = query
-            context.user_data['original_query'] = query
-            context.user_data['search_query'] = search_query
+
+        context.user_data['original_query'] = query
+        context.user_data['search_query'] = search_query
 
         # Поиск в Trefle
         url = f"{TREFLE_BASE_URL}/plants/search"
@@ -213,6 +213,7 @@ async def trefle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             'token': TREFLE_API_KEY
         }
 
+        print(f"🔍 ОТЛАДКА: Поисковый запрос: {search_query}")
         response = requests.get(url, params=params, timeout=15)
 
         if not response.ok:
@@ -220,6 +221,8 @@ async def trefle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return ASK_NAME
 
         data = response.json().get("data", [])
+        print(f"📊 ОТЛАДКА: Найдено результатов: {len(data)}")
+
         if not data:
             await searching_msg.edit_text(
                 f"🌱 *Растение не найдено*\n\n"
@@ -236,6 +239,34 @@ async def trefle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         plant = data[0]
         await searching_msg.delete()
 
+        # 🔍 ОТЛАДОЧНАЯ ИНФОРМАЦИЯ - выведем что пришло от Trefle
+        print("=== ДАННЫЕ ОТ TREFLE ===")
+        print(f"Common name: {plant.get('common_name')}")
+        print(f"Scientific name: {plant.get('scientific_name')}")
+        print(f"Family: {plant.get('family')}")
+        print(f"Observations: {plant.get('observations', '')[:100]}...")
+
+        growth_data = plant.get('growth', {})
+        print(f"Growth data exists: {bool(growth_data)}")
+        if growth_data:
+            print(f"Light: {growth_data.get('light')}")
+            print(f"PH min/max: {growth_data.get('ph_minimum')}-{growth_data.get('ph_maximum')}")
+            print(f"Bloom months: {growth_data.get('bloom_months')}")
+            print(f"Soil humidity: {growth_data.get('soil_humidity')}")
+            print(f"Growth months: {growth_data.get('growth_months')}")
+            print(f"Fruit months: {growth_data.get('fruit_months')}")
+            print(f"Min temp: {growth_data.get('minimum_temperature')}")
+            print(f"Max temp: {growth_data.get('maximum_temperature')}")
+
+        specifications = plant.get('specifications', {})
+        print(f"Specifications exists: {bool(specifications)}")
+        if specifications:
+            print(f"Toxicity: {specifications.get('toxicity')}")
+            print(f"Average height: {specifications.get('average_height')}")
+            print(f"Growth form: {specifications.get('growth_form')}")
+            print(f"Growth habit: {specifications.get('growth_habit')}")
+        print("========================")
+
         # Получаем детальную информацию о растении
         plant_id = plant.get('id')
         if plant_id:
@@ -244,7 +275,17 @@ async def trefle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             detail_response = requests.get(detail_url, params=detail_params, timeout=10)
             if detail_response.ok:
                 plant_detail = detail_response.json().get('data', {})
+                print(f"🔍 ОТЛАДКА: Детальная информация получена: {bool(plant_detail)}")
                 plant.update(plant_detail)
+
+                # Проверяем детальные данные
+                growth_detail = plant.get('growth', {})
+                if growth_detail:
+                    print(f"🔍 ОТЛАДКА: Детальный light: {growth_detail.get('light')}")
+                    print(f"🔍 ОТЛАДКА: Детальный bloom months: {growth_detail.get('bloom_months')}")
+                    print(f"🔍 ОТЛАДКА: Детальный soil humidity: {growth_detail.get('soil_humidity')}")
+            else:
+                print(f"❌ ОТЛАДКА: Ошибка получения детальной информации: {detail_response.status_code}")
 
         # Формируем улучшенный ответ
         common_name = plant.get('common_name')
@@ -292,10 +333,13 @@ async def trefle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += "⚠️ *Съедобность:* Не съедобное\n"
 
         # Добавляем рекомендации по уходу
-        text += "\n" + get_care_recommendations(plant)
+        care_recs = get_care_recommendations(plant)
+        print(f"🔍 ОТЛАДКА: Рекомендации по уходу: {care_recs}")
+        text += "\n" + care_recs
 
         # Добавляем сезонные рекомендации
         seasonal_advice = get_seasonal_advice(plant)
+        print(f"🔍 ОТЛАДКА: Сезонные рекомендации: {seasonal_advice}")
         if "Сезонные рекомендации" in seasonal_advice:
             text += "\n" + seasonal_advice
 
