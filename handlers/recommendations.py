@@ -110,21 +110,25 @@ async def start_seasonal_recommendations(update: Update, context: ContextTypes.D
 
 async def handle_season_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка выбора сезона"""
-    season_choice = update.message.text.lower()
+    user_input = update.message.text.lower()
 
-    # Нормализуем выбор
+    # Сопоставляем ввод пользователя с сезонами
     season_map = {
         "🌱 весна": "весна",
+        "весна": "весна",
         "☀️ лето": "лето",
+        "лето": "лето",
         "🍂 осень": "осень",
-        "❄️ зима": "зима"
+        "осень": "осень",
+        "❄️ зима": "зима",
+        "зима": "зима"
     }
 
-    season = season_map.get(update.message.text, season_choice)
+    season = season_map.get(user_input)
 
-    if season not in SEASONAL_RECOMMENDATIONS:
+    if not season:
         await update.message.reply_text(
-            "Пожалуйста, выберите время года из предложенных вариантов:",
+            "❌ Пожалуйста, выберите время года из предложенных вариантов:",
             reply_markup=ReplyKeyboardMarkup(SEASON_KEYBOARD, one_time_keyboard=True, resize_keyboard=True)
         )
         return SEASON
