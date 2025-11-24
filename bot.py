@@ -13,7 +13,7 @@ from telegram.ext import (
 )
 
 from database import init_db
-from handlers.profile import my_plants, build_profile_conversation, delete_plant_cb, setup_reminders_cb, \
+from handlers.profile import my_plants, build_profile_conversation, build_reminders_conversation, delete_plant_cb, setup_reminders_cb, \
     handle_interval_selection
 from handlers.diagnosis import handle_symptoms
 from handlers.recommendations import build_recommendations_conversation
@@ -127,6 +127,7 @@ def setup_handlers(application):
     application.add_handler(build_trefle_conversation())
     application.add_handler(build_gardener_conversation())  # ← здесь обрабатывается "👨‍🌾 Чат с агрономом"
     application.add_handler(build_profile_conversation())
+    application.add_handler(build_reminders_conversation())
 
     # Callback обработчики
     application.add_handler(CallbackQueryHandler(delete_plant_cb, pattern="^delete_"))
