@@ -20,7 +20,7 @@ API_KEY = os.getenv("PLANT_API_KEY")
 
 async def diagnose_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.photo:
-        await update.message.reply_text("📷 Отправь фото растения для диагностики.")
+        await update.message.reply_text("📷 Отправьте фото растения для диагностики")
         return
 
     # Берём самое большое фото
@@ -59,7 +59,7 @@ async def diagnose_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Проверяем, есть ли вообще растение
         is_plant = result.get("result", {}).get("is_plant", {}).get("binary")
         if is_plant is False:
-            await update.message.reply_text("❌ На фото не распознано растение.")
+            await update.message.reply_text("❌ На фото не распознано растение")
             return
 
         # Определение вида
@@ -76,7 +76,7 @@ async def diagnose_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 text += f"🌱 *Похоже, это:* {plant_name} - {prob}%\n\n"
         else:
-            text += "❓ Вид растения определить не удалось.\n\n"
+            text += "❓ Вид растения определить не удалось\n\n"
 
         # Диагностика здоровья
         disease_suggestions = result.get("result", {}).get("disease", {}).get("suggestions", [])
