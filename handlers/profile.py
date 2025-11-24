@@ -17,8 +17,7 @@ from database import (
 )
 
 # Этапы диалога
-ADD_NAME = range(1)
-SET_WATERING_INTERVAL = range(2)
+ADD_NAME, SET_WATERING_INTERVAL, CUSTOM_INTERVAL = range(3)  # Добавили новое состояние
 
 
 async def my_plants(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -205,16 +204,16 @@ async def handle_interval_selection(update: Update, context: ContextTypes.DEFAUL
             "*Пример:* 5 (полив каждые 5 дней)",
             parse_mode="Markdown"
         )
-        return SET_WATERING_INTERVAL
+        return CUSTOM_INTERVAL  # Переходим в новое состояние
 
 
 async def handle_custom_interval(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка пользовательского интервала"""
+    """Обработка пользовательского интервала - ТОЛЬКО для состояния CUSTOM_INTERVAL"""
     try:
         interval = int(update.message.text.strip())
         if interval < 1 or interval > 30:
             await update.message.reply_text("❌ Введите число от 1 до 30 дней")
-            return SET_WATERING_INTERVAL
+            return CUSTOM_INTERVAL
 
         plant_id = context.user_data.get('setup_plant_id')
         if plant_id:
@@ -232,7 +231,7 @@ async def handle_custom_interval(update: Update, context: ContextTypes.DEFAULT_T
 
     except ValueError:
         await update.message.reply_text("❌ Пожалуйста, введите число")
-        return SET_WATERING_INTERVAL
+        return CUSTOM_INTERVAL
 
 
 def build_profile_conversation():
@@ -244,6 +243,8 @@ def build_profile_conversation():
             SET_WATERING_INTERVAL: [
                 CallbackQueryHandler(handle_interval_selection, pattern="^interval_"),
                 CallbackQueryHandler(handle_interval_selection, pattern="^custom_interval$"),
+            ],
+            CUSTOM_INTERVAL: [  # Новое состояние для кастомного интервала
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_interval)
             ],
         },
