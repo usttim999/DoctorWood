@@ -23,14 +23,12 @@ async def diagnose_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("📷 Отправьте фото растения для диагностики")
         return
 
-    # Берём самое большое фото
     photo = update.message.photo[-1]
     file = await context.bot.get_file(photo.file_id)
     file_path = "temp.jpg"
     await file.download_to_drive(file_path)
 
     try:
-        # Читаем фото и кодируем в base64
         with open(file_path, "rb") as f:
             img_base64 = base64.b64encode(f.read()).decode("utf-8")
 
@@ -56,18 +54,15 @@ async def diagnose_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         result = response.json()
         text = ""
 
-        # Проверяем, есть ли вообще растение
         is_plant = result.get("result", {}).get("is_plant", {}).get("binary")
         if is_plant is False:
             await update.message.reply_text("❌ На фото не распознано растение")
             return
 
-        # Определение вида
         suggestions = result.get("result", {}).get("classification", {}).get("suggestions", [])
         if suggestions:
             best = suggestions[0]
             latin_name = best.get("name", "Неизвестно")
-            # Пытаемся перевести название
             plant_name = PLANT_TRANSLATIONS.get(latin_name.lower(), latin_name)
             prob = round(best.get("probability", 0) * 100, 1)
             common = best.get("details", {}).get("common_names", [])
@@ -78,10 +73,8 @@ async def diagnose_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             text += "❓ Вид растения определить не удалось\n\n"
 
-        # Диагностика здоровья
         disease_suggestions = result.get("result", {}).get("disease", {}).get("suggestions", [])
         if disease_suggestions:
-            # Собираем все найденные болезни для логирования
             all_disease_names = [d.get("name", "") for d in disease_suggestions if d.get("name")]
             unknown_diseases = get_unknown_diseases(all_disease_names)
 
@@ -92,10 +85,8 @@ async def diagnose_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             d_name = disease.get("name", "Неизвестная болезнь")
             d_prob = round(disease.get("probability", 0) * 100, 1)
 
-            # Перевод названия болезни
             translated_name = DISEASE_TRANSLATIONS.get(d_name.lower(), d_name)
 
-            # Получение описания и лечения
             description = DISEASE_DESCRIPTIONS.get(d_name.lower(),
                                                    disease.get("details", {}).get("description", ""))
             treatment = TREATMENT_RECOMMENDATIONS.get(d_name.lower(),

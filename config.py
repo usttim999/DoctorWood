@@ -1,6 +1,5 @@
 import os
 
-# База знаний о болезнях растений
 PLANT_DISEASES = {
     'пожелтение листьев': {
         'symptoms': ['желтые листья', 'пожелтение', 'хлороз'],
@@ -64,7 +63,6 @@ PLANT_DISEASES = {
     }
 }
 
-# Настройки напоминаний
 WATERING_REMINDERS = {
     'check_interval_hours': 1,
     'max_interval_days': 30,

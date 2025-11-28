@@ -5,13 +5,10 @@ import time
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler, MessageHandler, filters
 
-# Конфигурация GigaChat
 GIGACHAT_CREDENTIALS = os.getenv("GIGACHAT_CREDENTIALS")
 
-# Состояния диалога
 CHATTING_WITH_GARDENER = range(1)
 
-# Кэш для токенов
 access_token_cache = None
 token_expires_at = 0
 
@@ -20,7 +17,6 @@ async def get_gigachat_token():
     """Получение токена доступа GigaChat"""
     global access_token_cache, token_expires_at
 
-    # Если токен еще действителен (30 минут), возвращаем его
     current_time = int(time.time())
     if access_token_cache and token_expires_at > current_time:
         return access_token_cache
@@ -39,13 +35,12 @@ async def get_gigachat_token():
     }
 
     try:
-        # Отключаем проверку SSL для GigaChat API
         response = requests.post(url, headers=headers, data=payload, timeout=10, verify=False)
         response.raise_for_status()
 
         data = response.json()
         access_token_cache = data['access_token']
-        token_expires_at = data['expires_at'] // 1000  # Конвертируем из мс в секунды
+        token_expires_at = data['expires_at'] // 1000
 
         print(f"✅ Токен GigaChat получен, действителен до: {time.ctime(token_expires_at)}")
         return access_token_cache
@@ -69,7 +64,6 @@ async def get_gigachat_response(question: str) -> str:
         'Authorization': f'Bearer {token}'
     }
 
-    # Промпт для садовода
     system_prompt = """Ты опытный садовод-консультант с 20-летним стажем. Твоя специализация - комнатные растения, садоводство и уход за растениями.
 
 Отвечай профессионально, но доступно для новичков. Используй эмодзи для наглядности. Разбивай ответ на логические блоки.
@@ -99,7 +93,6 @@ async def get_gigachat_response(question: str) -> str:
     }
 
     try:
-        # Отключаем проверку SSL для GigaChat API
         response = requests.post(url, headers=headers, json=data, timeout=30, verify=False)
         response.raise_for_status()
 
@@ -131,7 +124,6 @@ async def start_gardener_chat(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return ConversationHandler.END
 
-    # Проверяем доступность GigaChat
     token = await get_gigachat_token()
     if not token:
         await update.message.reply_text(
@@ -164,13 +156,10 @@ async def handle_gardener_question(update: Update, context: ContextTypes.DEFAULT
     if user_question == "⬅️ Выйти из чата":
         return await end_gardener_chat(update, context)
 
-    # Показываем, что бот "печатает"
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
-    # Получаем ответ от GigaChat
     response = await get_gigachat_response(user_question)
 
-    # Отправляем ответ пользователю
     await update.message.reply_text(
         response,
         parse_mode="Markdown",

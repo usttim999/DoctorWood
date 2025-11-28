@@ -1,16 +1,13 @@
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler, MessageHandler, filters
 
-# Состояния для ConversationHandler
 SEASON, PLANT_TYPE = range(2)
 
-# Клавиатура для выбора сезона
 SEASON_KEYBOARD = [
     ["🌱 Весна", "☀️ Лето"],
     ["🍂 Осень", "❄️ Зима"]
 ]
 
-# База сезонных рекомендаций
 SEASONAL_RECOMMENDATIONS = {
     "весна": {
         "title": "🌱 *ВЕСЕННИЙ УХОД ЗА РАСТЕНИЯМИ*",
@@ -112,7 +109,6 @@ async def handle_season_choice(update: Update, context: ContextTypes.DEFAULT_TYP
     """Обработка выбора сезона"""
     user_input = update.message.text.lower()
 
-    # Сопоставляем ввод пользователя с сезонами
     season_map = {
         "🌱 весна": "весна",
         "весна": "весна",
@@ -133,7 +129,6 @@ async def handle_season_choice(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return SEASON
 
-    # Сохраняем выбор и показываем рекомендации
     context.user_data['season'] = season
     recommendations = SEASONAL_RECOMMENDATIONS[season]
 
@@ -160,7 +155,6 @@ async def cancel_recommendations(update: Update, context: ContextTypes.DEFAULT_T
     )
     return ConversationHandler.END
 
-# Создаем ConversationHandler
 def build_recommendations_conversation():
     return ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^📚 Рекомендации$"), start_seasonal_recommendations)],
@@ -174,7 +168,6 @@ def build_recommendations_conversation():
     )
 
 
-# Старая функция для обратной совместимости
 async def get_recommendations(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Старая функция - перенаправляем в новый диалог"""
     await start_seasonal_recommendations(update, context)

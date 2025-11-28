@@ -1,7 +1,6 @@
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes
 
-# Главное меню
 MAIN_KEYBOARD = [
     ["🌱 Мои растения", "🔍 Диагностика"],
     ["📚 Рекомендации", "🌍 Поиск растений"],

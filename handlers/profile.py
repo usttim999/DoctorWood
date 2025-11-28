@@ -16,7 +16,6 @@ from database import (
     mark_watered
 )
 
-# Этапы диалога
 ADD_NAME, SET_WATERING_INTERVAL = range(2)
 
 
@@ -204,7 +203,6 @@ async def handle_interval_selection(update: Update, context: ContextTypes.DEFAUL
             "*Пример:* 5 (полив каждые 5 дней)",
             parse_mode="Markdown"
         )
-        # Остаемся в том же состоянии SET_WATERING_INTERVAL для обработки текстового ввода
         return SET_WATERING_INTERVAL
 
 

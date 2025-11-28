@@ -4,7 +4,6 @@ import tempfile
 from contextlib import contextmanager
 from datetime import datetime
 
-# Определяем путь к БД
 DB_PATH = os.getenv('DB_PATH', '/data/plants.db')
 
 def init_db():
@@ -12,7 +11,6 @@ def init_db():
     with get_conn() as conn:
         cur = conn.cursor()
 
-        # Таблицы остаются без изменений
         cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -125,7 +123,6 @@ def set_watering_schedule(plant_id: int, watering_interval_days: int):
     """Установить график полива для растения"""
     with get_conn() as conn:
         cur = conn.cursor()
-        # Устанавливаем интервал и дату последнего полива (сейчас)
         cur.execute("""
             UPDATE plants 
             SET watering_every_days = ?, last_watered_at = ?

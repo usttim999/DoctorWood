@@ -17,7 +17,6 @@ async def handle_symptoms(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка описания симптомов"""
     user_text = update.message.text.lower()
 
-    # Поиск совпадений в базе знаний
     found_diseases = []
 
     for disease, info in PLANT_DISEASES.items():

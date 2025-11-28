@@ -35,7 +35,6 @@ if not TOKEN:
     logging.error("❌ BOT_TOKEN не установлен!")
     exit(1)
 
-# Главное меню
 MAIN_KEYBOARD = [
     ["🌱 Мои растения", "🔍 Диагностика"],
     ["📚 Рекомендации", "🌍 Поиск растений"],
@@ -70,7 +69,6 @@ async def test_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from database import add_plant, set_watering_schedule, upsert_user
     import datetime
 
-    # Создаем/получаем пользователя
     user_id = upsert_user(
         chat_id=update.effective_chat.id,
         username=update.effective_user.username,
@@ -78,13 +76,10 @@ async def test_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE):
         last_name=update.effective_user.last_name
     )
 
-    # Добавляем тестовое растение
     plant_id = add_plant(user_id, "Тестовое растение", "тест")
 
-    # Устанавливаем интервал 1 день
     set_watering_schedule(plant_id, 1)
 
-    # Ставим дату полива 2 дня назад для теста
     from database import get_conn
     with get_conn() as conn:
         cur = conn.cursor()
@@ -101,42 +96,34 @@ async def test_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def setup_handlers(application):
     """Настройка всех обработчиков"""
 
-    # Базовые команды
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("myplants", my_plants))
     application.add_handler(CommandHandler("check_reminders", check_reminders_command))
     application.add_handler(CommandHandler("test_reminder", test_reminder))  # только для теста
 
-    # Главное меню
     application.add_handler(MessageHandler(filters.Regex("^🌱 Мои растения$"), my_plants))
     application.add_handler(MessageHandler(filters.Regex("^🔍 Диагностика$"), diagnose_photo))
 
     from handlers.recommendations import build_recommendations_conversation
     application.add_handler(build_recommendations_conversation())
-    # УБИРАЕМ строку с start_gardener_chat - она обрабатывается в build_gardener_conversation()
 
-    # Кнопка Назад
     application.add_handler(MessageHandler(filters.Regex("^⬅️ Назад$"), back_to_main))
     application.add_handler(MessageHandler(filters.Regex("^↩️ Назад$"), back_to_main))
 
-    # Диагностика по фото
     application.add_handler(MessageHandler(filters.PHOTO, diagnose_photo))
 
-    # Диалоги
     application.add_handler(build_trefle_conversation())
-    application.add_handler(build_gardener_conversation())  # ← здесь обрабатывается "👨‍🌾 Чат с агрономом"
+    application.add_handler(build_gardener_conversation())
     application.add_handler(build_profile_conversation())
     application.add_handler(build_reminders_conversation())
 
-    # Callback обработчики
     application.add_handler(CallbackQueryHandler(delete_plant_cb, pattern="^delete_"))
     application.add_handler(CallbackQueryHandler(setup_reminders_cb, pattern="^reminders_"))
     application.add_handler(CallbackQueryHandler(handle_watered_callback, pattern="^watered_"))
     application.add_handler(CallbackQueryHandler(handle_interval_selection, pattern="^interval_"))
     application.add_handler(CallbackQueryHandler(handle_interval_selection, pattern="^custom_interval$"))
 
-    # Обработка текстовых сообщений
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_symptoms))
 
 
@@ -145,12 +132,11 @@ def create_application():
     application = Application.builder().token(TOKEN).build()
     setup_handlers(application)
 
-    # Настройка автоматических напоминаний
     job_queue = application.job_queue
     if job_queue:
         job_queue.run_repeating(
             check_watering_reminders,
-            interval=300,  # 5 минут для теста
+            interval=300,
             first=10
         )
         print("🔔 Автоматические напоминания настроены")
