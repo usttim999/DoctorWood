@@ -205,7 +205,8 @@ PLANT_TRANSLATIONS = {
     'rhipsalis': 'Рипсалис',
     'schlumbergera': 'Шлюмбергера',
     'epiphyllum': 'Эпифиллум',
-    'zygocactus': 'Зигокактус'
+    'zygocactus': 'Зигокактус',
+    'Euphorbia leuconeura': 'Молочай беложильчатый'
 }
 
 WATERING_GUIDE = {
